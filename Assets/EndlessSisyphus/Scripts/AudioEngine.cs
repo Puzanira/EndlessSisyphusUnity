@@ -117,6 +117,17 @@ namespace EndlessSisyphus
         }
         public void WindStop() { wind.Stop(); wind.volume = 0f; }
 
+        /// <summary>Полная остановка всего звука — для контрактного выхода по MenuButton.</summary>
+        public void StopAll()
+        {
+            drone.Stop();
+            melody.Stop();
+            sfx.Stop();
+            cinematic.Stop();
+            wind.Stop(); wind.volume = 0f;
+            musicOn = false;
+        }
+
         // ---- SFX ----
         public void Push(float s) { if (!muted) sfx.PlayOneShot(cPush, Mathf.Clamp01(0.22f + 0.20f * s)); }
         public void SteepPush(float s) { if (!muted) sfx.PlayOneShot(cSteepPush, Mathf.Clamp01(0.25f + 0.21f * s)); }

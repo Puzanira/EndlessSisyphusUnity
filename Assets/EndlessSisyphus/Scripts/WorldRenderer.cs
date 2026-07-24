@@ -66,6 +66,13 @@ namespace EndlessSisyphus
             sisSR = MakeSR("Sisyphus", 11);
         }
 
+        /// <summary>Снос построенного мира — для контрактного выхода по MenuButton.</summary>
+        public void Teardown()
+        {
+            if (root != null) Object.Destroy(root.gameObject);
+            root = null; bgSR = null; bouSR = null; sisSR = null;
+        }
+
         SpriteRenderer MakeSR(string name, int order)
         {
             var go = new GameObject(name);

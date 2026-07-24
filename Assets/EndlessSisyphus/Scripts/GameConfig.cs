@@ -57,5 +57,14 @@ namespace EndlessSisyphus
 
         public const float DayLen = 90f;           // длина цикла суток (сек)
         public const float SeasonLen = 70f;        // длина одного сезона (сек)
+
+        // ---- Крутилка автомата (ArcadeInput.Crank) → усилие толкания ----
+        // BLACK-TUNING: подобрано «на глаз» для колеса мыши (клавиатурная симуляция пакета:
+        // scroll * CrankDegreesPerScrollUnit из конфига пакета, дефолт 15°/ед). Основательница
+        // подкрутит утром на живом колесе — это единственные ручки крутилки, все здесь.
+        public const float CrankDegreesPerPush = 20f;  // накопленных °крутилки на один «толчок» (=старый tap)
+        public const float CrankDeadzoneDeg = 0.5f;    // ниже по модулю за кадр — считаем, что крутилку не двигают
+        public const float CrankHoldSeconds = 0.25f;   // сколько «толкание» держится после импульса крутилки:
+                                                       // мост дискретного колеса мыши в непрерывное удержание
     }
 }

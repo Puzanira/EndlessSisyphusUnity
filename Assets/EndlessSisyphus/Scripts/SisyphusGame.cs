@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
-using UnityEngine.InputSystem;   // проект с активным новым Input System
-#endif
+using AiGameStudio.ArcadeControls;   // ввод только через логические контролы автомата
 
 namespace EndlessSisyphus
 {
@@ -85,6 +83,12 @@ namespace EndlessSisyphus
         bool fogActive;
         ObKind lastObstacle = ObKind.None;
 
+        // ---- состояние ввода-крутилки (arcade-controls) ----
+        float crankAccum;      // накопленные градусы крутилки до следующего «толчка»
+        float pushHoldTimer;   // «толкание» ещё активно (мост дискретного колеса в удержание)
+        bool menuPrev, greenPrev, redPrev;   // предыдущее состояние кнопок (детект фронта)
+        bool shuttingDown;     // корректный выход по MenuButton начат — гейт остальной логики кадра
+
         public DifficultySettings Set;
         WorldRenderer world;
         AudioEngine audioEngine;
@@ -145,6 +149,9 @@ namespace EndlessSisyphus
 
             audioEngine = new AudioEngine(gameObject);
             world = new WorldRenderer(this);
+
+            // ввод автомата: свежая инициализация на каждый Bootstrap (чистый повторный вход)
+            ArcadeControlsAdapter.Initialize();
         }
 
         public AudioEngine Audio => audioEngine;
@@ -153,50 +160,84 @@ namespace EndlessSisyphus
         {
             float dt = Mathf.Min(Time.deltaTime, 0.05f);
             Clock += dt;
-            HandleInput();
+            HandleInput(dt);
+            if (shuttingDown) return;   // MenuButton: игра сворачивается — объект уже снесён
             Tick(dt);
             audioEngine.Tick(dt);
             UpdateAmbience(dt);
             world.Render();
         }
 
-        // ================= Ввод =================
-        // Дуальный ввод: работает и с legacy Input Manager, и с новым Input System —
-        // не нужно менять Active Input Handling в Player Settings.
-        void HandleInput()
+        // ================= Ввод (arcade-controls) =================
+        // Маппинг по автору (клавиши в скобках — его исходная клавиатурная раскладка):
+        //   Крутилка (Crank, был Space)      — толкать камень: вращение динамо → усилие.
+        //   «!» (BangButton) ЗАЖАТ (был Shift) — усиленный режим для крутого склона.
+        //   Красная (RedButton) НАЖАТЬ (был C) — тоггл защитного режима дождя.
+        //   Ветер                              — игрок сам перестаёт крутить, маппить нечего.
+        //   Зелёная (GreenButton, был Space/Enter/R) — интерфейс: начать / подтвердить / заново.
+        //   Menu (MenuButton)                  — корректный выход (контракт автомата).
+        void HandleInput(float dt)
         {
-#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
-            var kb = Keyboard.current; var ms = Mouse.current;
-            bool spaceDownNow = kb != null && kb.spaceKey.wasPressedThisFrame;
-            bool mouseDownNow = ms != null && ms.leftButton.wasPressedThisFrame;
-            bool spaceHeld = kb != null && kb.spaceKey.isPressed;
-            bool mouseHeld = ms != null && ms.leftButton.isPressed;
-            bool shift = kb != null && (kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed);
-            bool carefulDown = kb != null && kb.cKey.wasPressedThisFrame;
-            bool escDown = kb != null && kb.escapeKey.wasPressedThisFrame;
-            bool rDown = kb != null && kb.rKey.wasPressedThisFrame;
-            bool mDown = kb != null && kb.mKey.wasPressedThisFrame;
-#else
-            bool spaceDownNow = Input.GetKeyDown(KeyCode.Space);
-            bool mouseDownNow = Input.GetMouseButtonDown(0);
-            bool spaceHeld = Input.GetKey(KeyCode.Space);
-            bool mouseHeld = Input.GetMouseButton(0);
-            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-            bool carefulDown = Input.GetKeyDown(KeyCode.C);
-            bool escDown = Input.GetKeyDown(KeyCode.Escape);
-            bool rDown = Input.GetKeyDown(KeyCode.R);
-            bool mDown = Input.GetKeyDown(KeyCode.M);
-#endif
-            // Shift обновляется до обработки Space: одновременное Shift + Space
-            // должно считаться правильной комбинацией уже на первом толчке.
-            ShiftDown = shift;
-            if (spaceDownNow) OnPushStart();                                   // старт/толчок с клавиатуры
-            if (mouseDownNow && State == GState.Playing && !IntroActive) RegisterTap(); // мышь тапает только в игре
-            SpaceDown = !IntroActive && (spaceHeld || (mouseHeld && State == GState.Playing));
-            if (carefulDown) ToggleCareful();
-            if (escDown) { if (State == GState.Settings) CloseSettings(); else GoMenu(); }
-            if (rDown) { if (State == GState.Playing || State == GState.Over || State == GState.Falling) StartGame(); }
-            if (mDown) ToggleSound();
+            ArcadeControlsAdapter.Pump(dt);   // опрос бэкенда до чтения контролов
+
+            bool menuHeld = ArcadeInput.MenuButton.IsHeld;
+            bool greenHeld = ArcadeInput.GreenButton.IsHeld;
+            bool redHeld = ArcadeInput.RedButton.IsHeld;
+            bool menuDown = menuHeld && !menuPrev;
+            bool greenDown = greenHeld && !greenPrev;
+            bool redDown = redHeld && !redPrev;
+            menuPrev = menuHeld; greenPrev = greenHeld; redPrev = redHeld;
+
+            // Menu — контрактный чистый выход: снести объект и выйти из кадра.
+            if (menuDown) { ExitGame(); return; }
+
+            // «!» зажат = усиленный режим. Читаем ДО толчков крутилки: «!» + крутилка
+            // должны считаться правильной комбинацией уже на первом толчке крутого склона.
+            ShiftDown = ArcadeInput.BangButton.IsHeld;
+
+            // Зелёная = интерфейс. На старте/финале — начать/переиграть; в настройках — назад.
+            if (greenDown)
+            {
+                if (State == GState.Settings) CloseSettings();
+                else if (State == GState.Start || State == GState.Over) { audioEngine.StartMusic(); StartGame(); }
+            }
+
+            // Красная = тоггл защитного режима дождя (в игре, вне вступления).
+            if (redDown) ToggleCareful();
+
+            // Крутилка → толчки камня. Накопитель градусов переводит непрерывное вращение
+            // (и дискретные notch'и колеса мыши в клавиатурной симуляции) в дискретные «толчки».
+            float crankMag = Mathf.Abs(ArcadeInput.Crank.DeltaDegrees);
+            if (crankMag > GameConfig.CrankDeadzoneDeg)
+            {
+                crankAccum += crankMag;
+                pushHoldTimer = GameConfig.CrankHoldSeconds;   // взвели «толкание»
+            }
+            pushHoldTimer = Mathf.Max(0f, pushHoldTimer - dt);
+
+            bool canPush = State == GState.Playing && !IntroActive;
+            int guard = 0;   // ограничитель кадра против гигантского notch
+            while (crankAccum >= GameConfig.CrankDegreesPerPush && guard++ < 4)
+            {
+                crankAccum -= GameConfig.CrankDegreesPerPush;
+                if (canPush) RegisterTap();
+            }
+            if (crankAccum > GameConfig.CrankDegreesPerPush) crankAccum = GameConfig.CrankDegreesPerPush;
+
+            // «толкает сейчас» — удержание для гейта крутизны/льда и расхода стамины.
+            SpaceDown = canPush && pushHoldTimer > 0f;
+        }
+
+        // Контрактный чистый выход по MenuButton: остановить процедурный звук, снести
+        // построенный мир и сам объект. Никакого Application.Quit / DontDestroyOnLoad —
+        // готовность к повторному Bootstrap при возврате в сцену из лаунчера.
+        public void ExitGame()
+        {
+            if (shuttingDown) return;
+            shuttingDown = true;
+            audioEngine.StopAll();       // остановить музыку/ветер/SFX
+            world.Teardown();            // снести отдельный корень мира
+            Destroy(gameObject);         // SisyphusGame + QuoteDirector + GameUI + AudioSource'ы
         }
 
         public void OnPushStart()
