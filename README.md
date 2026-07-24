@@ -6,6 +6,9 @@ Unity-порт браузерной игры «Бесконечный Сизиф
 ## Требования
 
 - Unity `6000.5.3f1` (подойдут близкие версии Unity 6)
+- Рендер-конвейер — **URP (Universal Render Pipeline) 2D**. Пакет
+  `com.unity.render-pipelines.universal` подтягивается автоматически из
+  `Packages/manifest.json`; URP-ассеты уже назначены в Graphics/Quality Settings.
 - Проект не требует сторонних ассетов или ручной настройки сцены
 
 ## Как запустить
