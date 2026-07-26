@@ -1,0 +1,11 @@
+{
+  "name": "com.aigamestudio.game-endless-sisyphus",
+  "version": "0.1.0",
+  "displayName": "Endless Sisyphus",
+  "description": "Endless Sisyphus — Unity port of the browser game. Procedural pixel-art; Sisyphus pushes the boulder up an endless slope. Arcade cabinet game: reads input only through ArcadeInput (crank = push rhythm).",
+  "unity": "6000.5",
+  "author": { "name": "AI Game Studio" },
+  "dependencies": {
+    "com.aigamestudio.arcade-controls": "0.1.0"
+  }
+}

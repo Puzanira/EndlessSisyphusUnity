@@ -1,0 +1,16 @@
+{
+    "name": "EndlessSisyphus.Runtime",
+    "rootNamespace": "EndlessSisyphus",
+    "references": [
+        "AiGameStudio.ArcadeControls"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
