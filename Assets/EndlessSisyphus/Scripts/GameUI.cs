@@ -720,8 +720,8 @@ namespace EndlessSisyphus
                     }
                 };
                 string ct = game.CarefulBad
-                    ? "ОТКЛЮЧИ C — НЕТ ДОЖДЯ"
-                    : exitGrace ? "ДОЖДЬ ПРОШЁЛ — ОТКЛЮЧИ C" : "ОСТОРОЖНО (C)";
+                    ? "ОТКЛЮЧИ КРАСНУЮ — НЕТ ДОЖДЯ"
+                    : exitGrace ? "ДОЖДЬ ПРОШЁЛ — ОТКЛЮЧИ КРАСНУЮ" : "ОСТОРОЖНО (КРАСНАЯ)";
                 float carefulY = showQuote ? quoteArea.y - 38f * scale : h - 60f * scale;
                 PassiveLabel(new Rect(w / 2f - 200f * scale, carefulY, 400f * scale, 30f * scale), ct, cs);
             }
@@ -732,18 +732,18 @@ namespace EndlessSisyphus
         string BannerText()
         {
             if (game.WindExitGrace > 0f)
-                return "ВЕТЕР СТИХ — ТОЛКАЙ SPACE";
+                return "ВЕТЕР СТИХ — КРУТИ";
 
             switch (game.Obstacle)
             {
                 case ObKind.Wind:
                     return (game.WindVariant == 0 ? "ВЕТЕР" : game.WindVariant == 1 ? "ПОРЫВЫ" : "ТУРБУЛЕНТНЫЙ ВЕТЕР") +
-                        " — НЕ ЖМИ КЛАВИШИ";
+                        " — НЕ КРУТИ";
                 case ObKind.Rain:
                     return (game.RainVariant == 0 ? "МОРОСЬ" : game.RainVariant == 1 ? "ДОЖДЬ" : "ЛИВЕНЬ") +
-                        " — C + SPACE";
-                case ObKind.Ice: return game.ActiveIceDistance <= game.VW * 0.28f ? "ЛЁД — ДЕРЖИ SPACE" : null;
-                case ObKind.Steep: return game.ActiveSteepDistance <= game.VW * 0.30f ? "КРУТОЙ СКЛОН — SHIFT + SPACE" : null;
+                        " — КРАСНАЯ + КРУТИ";
+                case ObKind.Ice: return game.ActiveIceDistance <= game.VW * 0.28f ? "ЛЁД — КРУТИ РОВНО" : null;
+                case ObKind.Steep: return game.ActiveSteepDistance <= game.VW * 0.30f ? "КРУТОЙ СКЛОН — ! + КРУТИ" : null;
                 default: return null;
             }
         }
@@ -832,16 +832,16 @@ namespace EndlessSisyphus
             Rect storyRect = new Rect(tablet.x + 48f * scale, storyY, tablet.width - 96f * scale, 31f * scale);
             float keyTracking = 0.55f * scale;
             DrawNarrativeLine(storyRect, narrative, narrativeKey, keyTracking,
-                "ЛЁД", " — держи ", "SPACE", ", чтобы не оступиться.");
+                "ЛЁД", " — держи темп на ", "КРУТИЛКЕ", ", чтобы не оступиться.");
             storyRect.y += storyGap;
             DrawNarrativeLine(storyRect, narrative, narrativeKey, keyTracking,
-                "КРУТОЙ СКЛОН", " — ", "SHIFT + SPACE", ".");
+                "КРУТОЙ СКЛОН", " — зажми ", "! И КРУТИ", ".");
             storyRect.y += storyGap;
             DrawNarrativeLine(storyRect, narrative, narrativeKey, keyTracking,
-                "ДОЖДЬ", " — держи камень крепче, ", "С + SPACE", ".");
+                "ДОЖДЬ", " — держи камень крепче, ", "КРАСНАЯ + КРУТИ", ".");
             storyRect.y += storyGap;
             DrawNarrativeLine(storyRect, narrative, narrativeKey, keyTracking,
-                "ВЕТЕР", " — замри и ", "НЕ ТРОГАЙ КЛАВИШИ", ".");
+                "ВЕТЕР", " — замри и ", "ПЕРЕСТАНЬ КРУТИТЬ", ".");
             PassiveLabel(new Rect(tablet.x + 52f * scale, tablet.y + 250f * scale, tablet.width - 104f * scale, 58f * scale),
                 "Неверные действия, идущие против природы, отнимают силы Сизифа. Как только силы иссякнут, Сизиф упадёт, и камень скатится к подножью горы.", tabletFinal);
 
@@ -852,7 +852,7 @@ namespace EndlessSisyphus
                 fontSize = Mathf.Max(17, Mathf.RoundToInt(20f * scale)),
                 fontStyle = FontStyle.Normal
             };
-            if (GUI.Button(new Rect(buttonX, top + 484f * scale, buttonW, 50f * scale), "SPACE — НАЧАТЬ", startButton)) game.StartGame();
+            if (GUI.Button(new Rect(buttonX, top + 484f * scale, buttonW, 50f * scale), "ЗЕЛЁНАЯ — НАЧАТЬ", startButton)) game.StartGame();
 
             float secondaryW = buttonW * 0.52f;
             float secondaryX = (Screen.width - secondaryW) * 0.5f;
@@ -862,7 +862,7 @@ namespace EndlessSisyphus
                 fontStyle = FontStyle.Normal
             };
             if (GUI.Button(new Rect(secondaryX, top + 546f * scale, secondaryW, 36f * scale), "НАСТРОЙКИ СЛОЖНОСТИ", secondaryBtn)) game.OpenSettings();
-            PassiveLabel(new Rect(x, top + 594f * scale, contentW, 30f * scale), "M — звук     Esc — меню     R — заново", startHint);
+            PassiveLabel(new Rect(x, top + 594f * scale, contentW, 30f * scale), "КРУТИЛКА — толкать     ЗЕЛЁНАЯ — начать     MENU — выход", startHint);
 
             float authorMargin = 24f * scale;
             float logoSize = 44f * scale;
@@ -990,7 +990,7 @@ namespace EndlessSisyphus
                 PassiveLabel(new Rect(x, top + 222f * scale, width, 30f * scale), "★ НОВЫЙ РЕКОРД ★",
                     new GUIStyle(overRecord) { normal = { textColor = new Color(1f, 0.8f, 0.2f) } });
 
-            if (GUI.Button(new Rect(x, top + 258f * scale, width, 52f * scale), "SPACE — ЗАНОВО", btn)) game.StartGame();
+            if (GUI.Button(new Rect(x, top + 258f * scale, width, 52f * scale), "ЗЕЛЁНАЯ — ЗАНОВО", btn)) game.StartGame();
             float secondaryOverW = width * 0.58f;
             float secondaryOverX = (Screen.width - secondaryOverW) * 0.5f;
             var secondaryOverBtn = SecondaryButtonStyle(Mathf.Max(14, Mathf.RoundToInt(16f * scale)));
