@@ -2,6 +2,6 @@
   "name": "Endless Sisyphus",
   "version": "0.1.0",
   "entryScene": "Assets/EndlessSisyphus/Scenes/Main.unity",
-  "controls": ["Crank", "GreenButton", "BangButton", "MenuButton"],
+  "controls": ["Crank", "GreenButton", "BangButton", "RedButton", "MenuButton"],
   "launcherRain": null
 }
