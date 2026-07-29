@@ -1,14 +1,14 @@
 {
   "dependencies": {
     "com.aigamestudio.arcade-controls": {
-      "version": "https://github.com/Puzanira/arcade-controls.git?path=/components/unity-game/Packages/com.aigamestudio.arcade-controls#v0.1.0",
+      "version": "https://github.com/Puzanira/arcade-controls.git?path=/components/unity-game/Packages/com.aigamestudio.arcade-controls#v0.2.0",
       "depth": 0,
       "source": "git",
       "dependencies": {
         "com.unity.inputsystem": "1.19.0",
         "com.unity.ugui": "2.5.0"
       },
-      "hash": "8d5ba85d98dd7bad97c756de61025b65440e8bc6"
+      "hash": "093e5a771982888113d653586596cc52049037b1"
     },
     "com.unity.burst": {
       "version": "1.8.29",
