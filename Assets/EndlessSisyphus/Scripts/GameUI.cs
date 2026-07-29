@@ -706,7 +706,10 @@ namespace EndlessSisyphus
                 OutlinedPassiveLabel(new Rect(w / 2f - 230f * scale, 88f * scale, 460f * scale, 42f * scale),
                     bt, hudBanner, Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
 
-            // индикатор осторожного режима
+            // индикатор состояния защитного режима: игрок ОБЯЗАН видеть, включился ли режим,
+            // поэтому явный контурный бейдж «ЗАЩИТА ВКЛ/ВЫКЛ» в стиле баннера препятствий,
+            // а не тихая подпись (живой фидбек: «нажимаю красную — не понимаю, включилось ли»)
+            bool rainNow = game.Obstacle == ObKind.Rain || game.IRain > 0.05f;
             if (game.Careful)
             {
                 bool exitGrace = game.RainExitGrace > 0f;
@@ -720,10 +723,22 @@ namespace EndlessSisyphus
                     }
                 };
                 string ct = game.CarefulBad
-                    ? "ОТКЛЮЧИ КРАСНУЮ — НЕТ ДОЖДЯ"
-                    : exitGrace ? "ДОЖДЬ ПРОШЁЛ — ОТКЛЮЧИ КРАСНУЮ" : "ОСТОРОЖНО (КРАСНАЯ)";
+                    ? "ЗАЩИТА ВКЛ БЕЗ ДОЖДЯ — ОТКЛЮЧИ КРАСНУЮ"
+                    : exitGrace ? "ДОЖДЬ ПРОШЁЛ — ЗАЩИТА ВКЛ, ОТКЛЮЧИ КРАСНУЮ" : "ЗАЩИТА ОТ ДОЖДЯ — ВКЛ";
                 float carefulY = showQuote ? quoteArea.y - 38f * scale : h - 60f * scale;
-                PassiveLabel(new Rect(w / 2f - 200f * scale, carefulY, 400f * scale, 30f * scale), ct, cs);
+                OutlinedPassiveLabel(new Rect(w / 2f - 260f * scale, carefulY, 520f * scale, 34f * scale),
+                    ct, cs, Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
+            }
+            else if (rainNow)
+            {
+                // дождь идёт/надвигается, а защита НЕ включена — красным, чтобы промах по
+                // красной кнопке (не та клавиша, ранний press) был виден сразу
+                var offStyle = new GUIStyle(hudBanner)
+                    { normal = { textColor = new Color(0.84f, 0.29f, 0.23f) } };
+                float carefulY = showQuote ? quoteArea.y - 38f * scale : h - 60f * scale;
+                OutlinedPassiveLabel(new Rect(w / 2f - 260f * scale, carefulY, 520f * scale, 34f * scale),
+                    "ЗАЩИТА ВЫКЛ — НАЖМИ КРАСНУЮ", offStyle,
+                    Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
             }
 
             if (showQuote) DrawStoneQuote(quotes.CurrentText, quotes.Opacity);
