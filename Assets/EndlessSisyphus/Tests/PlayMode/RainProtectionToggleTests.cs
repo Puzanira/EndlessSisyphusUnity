@@ -26,6 +26,10 @@ namespace EndlessSisyphus.Tests
         public IEnumerator SetUp()
         {
             host = new GameObject("SisyphusGame_UnderTest");
+            // Бэкенд предыдущего теста живёт в статике ArcadeInput, а адаптер пампит ввод ТОЛЬКО
+            // когда бэкенд его собственный (в лаунчере пампит лаунчер). Сбрасываем бэкенд ДО Awake,
+            // иначе адаптер решит, что он в лаунчере, и ввод в тесте будет заморожен.
+            ArcadeInput.Initialize(null);
             game = host.AddComponent<SisyphusGame>();   // Awake: мир, звук, ArcadeControlsAdapter.Initialize
             fake = new FakeBackend();
             ArcadeInput.Initialize(fake);               // подменяем клавиатурный бэкенд фейком

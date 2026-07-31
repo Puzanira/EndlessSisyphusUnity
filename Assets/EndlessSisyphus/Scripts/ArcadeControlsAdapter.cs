@@ -10,19 +10,30 @@ namespace EndlessSisyphus
     /// </summary>
     public static class ArcadeControlsAdapter
     {
+        // True only standalone, where nothing else set up ArcadeInput. In the arcade hub the
+        // launcher owns the backend (keyboard + serial boards) and pumps it process-wide; replacing
+        // it here would silently downgrade the game to keyboard-only and kill the physical controls.
+        static bool ownsBackend;
+
         /// <summary>
-        /// Свежая инициализация бэкенда + сброс всех логических контролов. Зовётся из Awake
-        /// игры, поэтому каждый (повторный) Bootstrap стартует с чистым состоянием ввода.
+        /// Инициализация бэкенда ТОЛЬКО если его ещё нет (standalone). В лаунчере бэкенд уже
+        /// стоит (клавиатура + платы) — его не трогаем и не пампим (лаунчер пампит сам).
         /// Null-safe для headless: сам опрос устройств живёт в KeyboardBackend, который
         /// корректно переживает отсутствие Keyboard.current / Mouse.current.
         /// </summary>
         public static void Initialize()
         {
+            ownsBackend = ArcadeInput.Backend == null;
+            if (!ownsBackend) return;
+
             KeyboardMapping map = KeyboardMapping.LoadDefault();
             ArcadeInput.Initialize(new KeyboardBackend(map));
         }
 
-        /// <summary>Опрос бэкенда раз в кадр — вызывать ДО чтения контролов игрой.</summary>
-        public static void Pump(float deltaTime) => ArcadeInput.Update(deltaTime);
+        /// <summary>Опрос бэкенда раз в кадр (только когда бэкенд наш) — вызывать ДО чтения контролов.</summary>
+        public static void Pump(float deltaTime)
+        {
+            if (ownsBackend) ArcadeInput.Update(deltaTime);
+        }
     }
 }

@@ -309,6 +309,7 @@ namespace EndlessSisyphus
             }
             if (active == ObKind.Rain) impulse *= GameConfig.RainPushMul;
             Momentum += impulse;
+            if (Momentum > GameConfig.MaxMomentum) Momentum = GameConfig.MaxMomentum;   // потолок скорости
             if (active == ObKind.Wind) audioEngine.WindResistance(factor);
             else if (active == ObKind.Steep) audioEngine.SteepPush(factor);
             else audioEngine.Push(factor);
@@ -529,6 +530,9 @@ namespace EndlessSisyphus
             Momentum -= 1.5f * IWind * dt;
             if (IsOnSteep && Momentum > GameConfig.SteepMaxMomentum)
                 Momentum = GameConfig.SteepMaxMomentum;
+            // Общий потолок скорости — последним, перед интегрированием: сколько бы толчков
+            // крутилка ни выдала за кадр, выше него камень не поедет.
+            if (Momentum > GameConfig.MaxMomentum) Momentum = GameConfig.MaxMomentum;
 
             Height += Momentum * dt;
             if (Height < 0) { Height = 0; if (Momentum < 0) Momentum = 0; }

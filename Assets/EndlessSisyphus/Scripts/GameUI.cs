@@ -726,7 +726,7 @@ namespace EndlessSisyphus
                     ? "ЗАЩИТА ВКЛ БЕЗ ДОЖДЯ — ОТКЛЮЧИ КРАСНУЮ"
                     : exitGrace ? "ДОЖДЬ ПРОШЁЛ — ЗАЩИТА ВКЛ, ОТКЛЮЧИ КРАСНУЮ" : "ЗАЩИТА ОТ ДОЖДЯ — ВКЛ";
                 float carefulY = showQuote ? quoteArea.y - 38f * scale : h - 60f * scale;
-                OutlinedPassiveLabel(new Rect(w / 2f - 260f * scale, carefulY, 520f * scale, 34f * scale),
+                OutlinedPassiveLabel(new Rect(w / 2f - 320f * scale, carefulY, 640f * scale, 34f * scale),
                     ct, cs, Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
             }
             else if (rainNow)
@@ -736,8 +736,9 @@ namespace EndlessSisyphus
                 var offStyle = new GUIStyle(hudBanner)
                     { normal = { textColor = new Color(0.84f, 0.29f, 0.23f) } };
                 float carefulY = showQuote ? quoteArea.y - 38f * scale : h - 60f * scale;
-                OutlinedPassiveLabel(new Rect(w / 2f - 260f * scale, carefulY, 520f * scale, 34f * scale),
-                    "ЗАЩИТА ВЫКЛ — НАЖМИ КРАСНУЮ", offStyle,
+                // «ОДИН РАЗ (НЕ ДЕРЖИ)» — красная это ТОГГЛ: игроки её зажимают и ждут эффекта.
+                OutlinedPassiveLabel(new Rect(w / 2f - 320f * scale, carefulY, 640f * scale, 34f * scale),
+                    "ЗАЩИТА ВЫКЛ — НАЖМИ КРАСНУЮ ОДИН РАЗ (НЕ ДЕРЖИ)", offStyle,
                     Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
             }
 
@@ -755,8 +756,10 @@ namespace EndlessSisyphus
                     return (game.WindVariant == 0 ? "ВЕТЕР" : game.WindVariant == 1 ? "ПОРЫВЫ" : "ТУРБУЛЕНТНЫЙ ВЕТЕР") +
                         " — НЕ КРУТИ";
                 case ObKind.Rain:
+                    // «ОДИН РАЗ» прямо в баннере: живой фидбек — игроки ЗАЖИМАЮТ красную,
+                    // хотя это тоггл и достаточно короткого нажатия.
                     return (game.RainVariant == 0 ? "МОРОСЬ" : game.RainVariant == 1 ? "ДОЖДЬ" : "ЛИВЕНЬ") +
-                        " — КРАСНАЯ + КРУТИ";
+                        " — КРАСНАЯ ОДИН РАЗ + КРУТИ";
                 case ObKind.Ice: return game.ActiveIceDistance <= game.VW * 0.28f ? "ЛЁД — КРУТИ РОВНО" : null;
                 case ObKind.Steep: return game.ActiveSteepDistance <= game.VW * 0.30f ? "КРУТОЙ СКЛОН — ! + КРУТИ" : null;
                 default: return null;
@@ -853,7 +856,7 @@ namespace EndlessSisyphus
                 "КРУТОЙ СКЛОН", " — зажми ", "! И КРУТИ", ".");
             storyRect.y += storyGap;
             DrawNarrativeLine(storyRect, narrative, narrativeKey, keyTracking,
-                "ДОЖДЬ", " — держи камень крепче, ", "КРАСНАЯ + КРУТИ", ".");
+                "ДОЖДЬ", " — держи камень крепче, ", "КРАСНАЯ ОДИН РАЗ + КРУТИ", " — нажать, не держать.");
             storyRect.y += storyGap;
             DrawNarrativeLine(storyRect, narrative, narrativeKey, keyTracking,
                 "ВЕТЕР", " — замри и ", "ПЕРЕСТАНЬ КРУТИТЬ", ".");
@@ -869,15 +872,9 @@ namespace EndlessSisyphus
             };
             if (GUI.Button(new Rect(buttonX, top + 484f * scale, buttonW, 50f * scale), "ЗЕЛЁНАЯ — НАЧАТЬ", startButton)) game.StartGame();
 
-            float secondaryW = buttonW * 0.52f;
-            float secondaryX = (Screen.width - secondaryW) * 0.5f;
-            var secondaryBtn = new GUIStyle(startButton)
-            {
-                fontSize = Mathf.Max(13, Mathf.RoundToInt(15f * scale)),
-                fontStyle = FontStyle.Normal
-            };
-            if (GUI.Button(new Rect(secondaryX, top + 546f * scale, secondaryW, 36f * scale), "НАСТРОЙКИ СЛОЖНОСТИ", secondaryBtn)) game.OpenSettings();
-            PassiveLabel(new Rect(x, top + 594f * scale, contentW, 30f * scale), "КРУТИЛКА — толкать     ЗЕЛЁНАЯ — начать     MENU — выход", startHint);
+            // Кнопки настроек на автомате нет: мыши у стойки нет, сложность берётся дефолтная
+            // (DifficultySettings.Load) — экран настроек остаётся в коде, но входа в него с экранов нет.
+            PassiveLabel(new Rect(x, top + 546f * scale, contentW, 30f * scale), "КРУТИЛКА — толкать     ЗЕЛЁНАЯ — начать     MENU — выход", startHint);
 
             float authorMargin = 24f * scale;
             float logoSize = 44f * scale;
@@ -1006,10 +1003,9 @@ namespace EndlessSisyphus
                     new GUIStyle(overRecord) { normal = { textColor = new Color(1f, 0.8f, 0.2f) } });
 
             if (GUI.Button(new Rect(x, top + 258f * scale, width, 52f * scale), "ЗЕЛЁНАЯ — ЗАНОВО", btn)) game.StartGame();
-            float secondaryOverW = width * 0.58f;
-            float secondaryOverX = (Screen.width - secondaryOverW) * 0.5f;
-            var secondaryOverBtn = SecondaryButtonStyle(Mathf.Max(14, Mathf.RoundToInt(16f * scale)));
-            if (GUI.Button(new Rect(secondaryOverX, top + 324f * scale, secondaryOverW, 36f * scale), "В МЕНЮ", secondaryOverBtn)) game.GoMenu();
+            // Вторичной кнопки «В МЕНЮ» на автомате нет: указателя у стойки нет, а выход
+            // с экрана — физическая MENU (контракт автомата), она же возвращает в лаунчер.
+            PassiveLabel(new Rect(x, top + 324f * scale, width, 30f * scale), "MENU — выход", overRecord);
 
             DrawStoneQuote(DefeatQuote, 1f);
         }

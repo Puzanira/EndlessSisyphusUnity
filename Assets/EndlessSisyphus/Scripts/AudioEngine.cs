@@ -126,6 +126,10 @@ namespace EndlessSisyphus
             cinematic.Stop();
             wind.Stop(); wind.volume = 0f;
             musicOn = false;
+            // AudioListener.volume — ГЛОБАЛЬНАЯ ручка на весь процесс: в лаунчере после нас
+            // запускается следующая игра, и уйти из игры «замьюченным» значит унести с собой
+            // её звук. Выходим всегда со снятым мьютом.
+            if (muted) { muted = false; AudioListener.volume = 1f; }
         }
 
         // ---- SFX ----
