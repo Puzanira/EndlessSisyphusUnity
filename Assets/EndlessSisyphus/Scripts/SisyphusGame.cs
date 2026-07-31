@@ -54,6 +54,8 @@ namespace EndlessSisyphus
         public float SlipRisk, Shake, Scroll, SfxTimer, RainExitGrace;
         public float WindReactionTimer;
         public float WindExitGrace;
+        float wrongSteepComboTimer;
+        float wrongSteepLastUseTime = float.NegativeInfinity;
         public float StoneAngle, StoneSpinVel;
         public bool IntroActive;
         public float IntroT;
@@ -154,6 +156,14 @@ namespace EndlessSisyphus
             ArcadeControlsAdapter.Initialize();
         }
 
+        void Start()
+        {
+            // Музыка принадлежит всему игровому циклу и начинается уже в меню,
+            // а StartGame лишь возвращает её к игровому уровню громкости.
+            audioEngine.StartMusic();
+            audioEngine.RestoreGameplayMusic();
+        }
+
         public AudioEngine Audio => audioEngine;
 
         void Update()
@@ -248,13 +258,13 @@ namespace EndlessSisyphus
             if (State == GState.Playing && !IntroActive) RegisterTap();
         }
 
-        public void ToggleSound() { audioEngine.ToggleMute(); }
         public void ToggleCareful() { if (State != GState.Playing || IntroActive) return; Careful = !Careful; }
 
         // ================= Экраны =================
         public void StartGame()
         {
-            audioEngine.StartMusic(); audioEngine.RestoreGameplayMusic(); audioEngine.WindStop();
+            audioEngine.StartMusic(); audioEngine.RestoreGameplayMusic();
+            audioEngine.WindStop(); audioEngine.RainStop();
             RunId++;
             State = GState.Playing;
             Height = 0; Momentum = 0; Stamina = GameConfig.StaminaMax;
@@ -267,6 +277,8 @@ namespace EndlessSisyphus
             RainExitGrace = 0;
             WindReactionTimer = 0;
             WindExitGrace = 0;
+            wrongSteepComboTimer = 0;
+            wrongSteepLastUseTime = float.NegativeInfinity;
             IcePatches.Clear();
             SteepPatches.Clear();
             RainVariant = WindVariant = 0;
@@ -285,7 +297,7 @@ namespace EndlessSisyphus
             Critters.RemoveAll(c => c.kind == CritterKind.Snake);
         }
 
-        public void GoMenu() { State = GState.Start; DefeatStage = DefeatPhase.None; audioEngine.RestoreGameplayMusic(); audioEngine.WindStop(); }
+        public void GoMenu() { State = GState.Start; DefeatStage = DefeatPhase.None; audioEngine.RestoreGameplayMusic(); audioEngine.WindStop(); audioEngine.RainStop(); }
         public void OpenSettings() { State = GState.Settings; }
         public void CloseSettings() { State = GState.Start; }
 
@@ -294,6 +306,21 @@ namespace EndlessSisyphus
         {
             if (IntroActive) return;
             float now = Time.time, interval = now - LastTapTime; LastTapTime = now; PushAnim = 1;
+            if (ShiftDown && !IsOnSteep)
+            {
+                if (now - wrongSteepLastUseTime > GameConfig.WrongSteepComboWindow)
+                    wrongSteepComboTimer = 0f;
+                wrongSteepLastUseTime = now;
+                if (wrongSteepComboTimer >= GameConfig.WrongSteepComboGrace)
+                    Stamina = Mathf.Max(0f, Stamina -
+                        GameConfig.ErrWrongSteepComboTap * Set.DrainMul);
+            }
+            else if (!IsOnSteep)
+            {
+                // Обычный толчок сразу завершает серию неверного сочетания.
+                wrongSteepComboTimer = 0f;
+                wrongSteepLastUseTime = float.NegativeInfinity;
+            }
             float factor;
             if (interval < GameConfig.MashInterval) factor = 0.3f;
             else { float diff = Mathf.Abs(interval - GameConfig.IdealInterval); factor = Mathf.Clamp(1 - diff * 1.5f, 0.35f, 1f); }
@@ -312,6 +339,7 @@ namespace EndlessSisyphus
             if (Momentum > GameConfig.MaxMomentum) Momentum = GameConfig.MaxMomentum;   // потолок скорости
             if (active == ObKind.Wind) audioEngine.WindResistance(factor);
             else if (active == ObKind.Steep) audioEngine.SteepPush(factor);
+            else if (active == ObKind.Rain) audioEngine.RainPush(factor);
             else audioEngine.Push(factor);
         }
 
@@ -356,7 +384,12 @@ namespace EndlessSisyphus
                         }
                     }
                 }
-                else if (Phase == ObPhase.Warn) { Phase = ObPhase.Active; ObTimer = ObstacleDuration(); }
+                else if (Phase == ObPhase.Warn)
+                {
+                    Phase = ObPhase.Active;
+                    ObTimer = ObstacleDuration();
+                    if (Obstacle == ObKind.Rain) audioEngine.RainStart(RainVariant);
+                }
                 else
                 {
                     if (Obstacle == ObKind.Wind)
@@ -365,7 +398,11 @@ namespace EndlessSisyphus
                         WindReactionTimer = 0f;
                         WindExitGrace = GameConfig.WindExitGrace;
                     }
-                    if (Obstacle == ObKind.Rain) RainExitGrace = GameConfig.RainExitGrace;
+                    if (Obstacle == ObKind.Rain)
+                    {
+                        audioEngine.RainStop();
+                        RainExitGrace = GameConfig.RainExitGrace;
+                    }
                     Obstacle = ObKind.None; Phase = ObPhase.Calm;
                     ObTimer = Rand(GameConfig.CalmMin, GameConfig.CalmMax) / Mathf.Sqrt(Difficulty()) / Set.FreqMul;
                 }
@@ -538,10 +575,26 @@ namespace EndlessSisyphus
             if (Height < 0) { Height = 0; if (Momentum < 0) Momentum = 0; }
 
             float drain = 0;
-            bool rainGrace = (Obstacle == ObKind.Rain && Phase == ObPhase.Warn) || RainExitGrace > 0f;
+            // Нажать C можно сразу после появления предупреждения. Вся фаза
+            // выбранного дождя считается корректной, включая короткое нарастание
+            // визуальной интенсивности в начале активной фазы.
+            bool rainGrace = Obstacle == ObKind.Rain || RainExitGrace > 0f;
+            bool wrongSteepHold = !IsOnSteep && SpaceDown && ShiftDown;
+            bool recentWrongSteepUse = !IsOnSteep &&
+                (wrongSteepHold ||
+                 Time.time - wrongSteepLastUseTime <= GameConfig.WrongSteepComboWindow);
+            if (wrongSteepHold) wrongSteepLastUseTime = Time.time;
+            if (recentWrongSteepUse) wrongSteepComboTimer += dt;
+            else
+            {
+                wrongSteepComboTimer = 0f;
+                if (IsOnSteep) wrongSteepLastUseTime = float.NegativeInfinity;
+            }
             if (IWind > 0.5f && SpaceDown && WindReactionTimer <= 0f) drain += GameConfig.DrainWind;
             if (IsOnIce && !SpaceDown) drain += GameConfig.DrainIce;
             if (IsOnSteep && SpaceDown && !ShiftDown) drain += GameConfig.DrainSteep;
+            if (wrongSteepHold && wrongSteepComboTimer >= GameConfig.WrongSteepComboGrace)
+                drain += GameConfig.DrainWrongSteepCombo;
             if (Careful && IRain < 0.5f && !rainGrace) drain += GameConfig.DrainCareful;
             if (IWind < 0.5f && WindExitGrace <= 0f && !IsOnSteep &&
                 Height > GameConfig.GraceHeight && Momentum < -0.05f)
@@ -554,7 +607,7 @@ namespace EndlessSisyphus
             SfxTimer -= dt;
             if (SfxTimer <= 0f)
             {
-                if (IsOnIce && SpaceDown && Mathf.Abs(Momentum) > 0.15f) { audioEngine.Ice(); SfxTimer = Rand(0.34f, 0.48f); }
+                if (IsOnIce && Mathf.Abs(Momentum) > 0.15f) { audioEngine.Ice(); SfxTimer = Rand(0.34f, 0.48f); }
                 else if (IsOnSteep && SpaceDown) { audioEngine.Friction(); SfxTimer = Rand(0.16f, 0.24f); }
                 else SfxTimer = 0.1f;
             }
@@ -580,10 +633,13 @@ namespace EndlessSisyphus
             FallReason = reason;
             Momentum = 0;
             SpaceDown = ShiftDown = Careful = CarefulBad = false;
+            wrongSteepComboTimer = 0f;
+            wrongSteepLastUseTime = float.NegativeInfinity;
             Shake = 0.65f;
             StoneSpinVel = -1.2f;
             audioEngine.WindStop();
-            audioEngine.BeginDefeat();
+            audioEngine.RainStop();
+            audioEngine.BeginDefeat(reason);
         }
 
         void UpdateFall(float dt)

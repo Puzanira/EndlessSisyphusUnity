@@ -69,8 +69,7 @@ namespace EndlessSisyphus
         public static void EnsureAudioListener()
         {
             AudioListener.pause = false;
-            var listeners = Object.FindObjectsByType<AudioListener>(
-                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var listeners = Object.FindObjectsByType<AudioListener>(FindObjectsInactive.Include);
             for (int i = 0; i < listeners.Length; i++)
             {
                 if (!listeners[i].gameObject.activeInHierarchy) continue;

@@ -17,23 +17,29 @@ namespace EndlessSisyphus.Tests
     public class ArcadeAudioPathTests
     {
         GameObject foreignCamera;
+        GameObject gameHost;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
             // Чистый лист: сцена теста без слушателя — как сцена игры, загруженная лаунчером.
-            foreach (var l in Object.FindObjectsByType<AudioListener>(
-                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var l in Object.FindObjectsByType<AudioListener>(FindObjectsInactive.Include))
                 Object.DestroyImmediate(l);
             AudioListener.volume = 1f;
             AudioListener.pause = false;
             yield return null;
         }
 
+        // Уборка ТОЛЬКО здесь: упавший Assert обрывает тело теста, и живой SisyphusGame,
+        // снесённый бы в конце теста, утёк бы во все следующие фикстуры (его Update
+        // продолжает рендерить мир и валит их чужими исключениями).
         [UnityTearDown]
         public IEnumerator TearDown()
         {
             if (foreignCamera != null) Object.Destroy(foreignCamera);
+            if (gameHost != null) Object.Destroy(gameHost);
+            var world = GameObject.Find("EndlessSisyphus_World");
+            if (world != null) Object.Destroy(world);
             AudioListener.volume = 1f;
             AudioListener.pause = false;
             yield return null;
@@ -48,14 +54,12 @@ namespace EndlessSisyphus.Tests
             foreignCamera.tag = "MainCamera";
             yield return null;
 
-            Assert.AreEqual(0, Object.FindObjectsByType<AudioListener>(
-                    FindObjectsInactive.Include, FindObjectsSortMode.None).Length,
+            Assert.AreEqual(0, Object.FindObjectsByType<AudioListener>(FindObjectsInactive.Include).Length,
                 "предусловие: слушателя в сцене нет");
 
             Bootstrap.EnsureAudioListener();
 
-            var listeners = Object.FindObjectsByType<AudioListener>(
-                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var listeners = Object.FindObjectsByType<AudioListener>(FindObjectsInactive.Include);
             Assert.AreEqual(1, listeners.Length,
                 "игра обязана обеспечить ровно один AudioListener, даже когда камерой владеет лаунчер");
             Assert.IsTrue(listeners[0].enabled && listeners[0].gameObject.activeInHierarchy,
@@ -67,14 +71,17 @@ namespace EndlessSisyphus.Tests
         [UnityTest]
         public IEnumerator Exit_RestoresGlobalVolume_ForNextGame()
         {
-            var host = new GameObject("SisyphusGame_Audio");
+            gameHost = new GameObject("SisyphusGame_Audio");
             ArcadeInput.Initialize(null);   // см. комментарий в SpeedCapTests: сброс бэкенда до Awake
-            var game = host.AddComponent<SisyphusGame>();
+            var game = gameHost.AddComponent<SisyphusGame>();
             ArcadeInput.Initialize(new FakeBackend());
             yield return null;
 
-            Assert.AreEqual(5, host.GetComponents<AudioSource>().Length,
-                "AudioEngine поднимает свои AudioSource'ы на объекте игры (дрон/мелодия/sfx/ветер/кино)");
+            // Ровное число источников — деталь автора (он добавляет их по мере роста звука,
+            // сейчас дрон/мелодия/sfx/ветер/дождь/кино), поэтому проверяем инвариант:
+            // движок поднимает свои источники НА ОБЪЕКТЕ ИГРЫ, а не где-то в сцене.
+            Assert.GreaterOrEqual(gameHost.GetComponents<AudioSource>().Length, 5,
+                "AudioEngine поднимает свои AudioSource'ы на объекте игры");
 
             game.Audio.ToggleMute();
             Assert.AreEqual(0f, AudioListener.volume, 1e-4f, "мьют глушит глобальную громкость");
@@ -82,10 +89,6 @@ namespace EndlessSisyphus.Tests
             game.Audio.StopAll();   // контрактный выход по MenuButton
             Assert.AreEqual(1f, AudioListener.volume, 1e-4f,
                 "выход из игры не должен уносить с собой звук лаунчера и следующей игры");
-
-            Object.Destroy(host);
-            var world = GameObject.Find("EndlessSisyphus_World");
-            if (world != null) Object.Destroy(world);
             yield return null;
         }
     }

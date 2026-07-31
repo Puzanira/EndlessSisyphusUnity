@@ -13,13 +13,17 @@ namespace EndlessSisyphus
     {
         const int SR = 44100;
         const float Beat = 0.62f;
+        const float GameplaySfxGain = 1.48f;
+        const float NatureSfxGain = 1.68f;
+        const float CinematicSfxGain = 1.18f;
 
-        readonly AudioSource drone, melody, sfx, wind, cinematic;
+        readonly AudioSource drone, melody, sfx, wind, rain, cinematic;
         bool musicOn, muted;
         float droneTarget = 0.4f, melodyTarget = 0.4f;
 
-        AudioClip droneClip, melodyClip, windClip;
-        AudioClip cPush, cSteepPush, cWindPush, cIce, cFriction, cError, cRumble, cGameover;
+        AudioClip droneClip, melodyClip, windClip, rainClip;
+        AudioClip cPush, cSteepPush, cWindPush, cRainPush, cIce, cFriction;
+        AudioClip cSlipFall, cExhaustedBreath, cError, cRumble, cGameover;
         AudioClip cDefeatRoll, cDefeatLook, cDefeatDescent;
 
         static readonly System.Random rng = new System.Random(1234);
@@ -35,12 +39,16 @@ namespace EndlessSisyphus
             ("G3",2),("F3",2),("E3",2),("",2),("D4",1),("C4",1),("B3",2),("A3",2),("",2),
         };
 
+        static float Gain(float value, float multiplier) =>
+            Mathf.Clamp01(value * multiplier);
+
         public AudioEngine(GameObject host)
         {
             drone = host.AddComponent<AudioSource>(); drone.loop = true; drone.playOnAwake = false; drone.volume = 0.4f;
             melody = host.AddComponent<AudioSource>(); melody.loop = true; melody.playOnAwake = false; melody.volume = 0.4f;
             sfx = host.AddComponent<AudioSource>(); sfx.playOnAwake = false;
             wind = host.AddComponent<AudioSource>(); wind.loop = true; wind.playOnAwake = false; wind.volume = 0f;
+            rain = host.AddComponent<AudioSource>(); rain.loop = true; rain.playOnAwake = false; rain.volume = 0f;
             cinematic = host.AddComponent<AudioSource>(); cinematic.playOnAwake = false; cinematic.volume = 1f;
             BuildSfx();
         }
@@ -74,13 +82,15 @@ namespace EndlessSisyphus
             cinematic.Stop();
         }
 
-        public void BeginDefeat()
+        public void BeginDefeat(string reason)
         {
             StartMusic();
             droneTarget = 0.22f;
             melodyTarget = 0.08f;
             cinematic.Stop();
-            if (!muted) cinematic.PlayOneShot(cFriction, 0.55f);
+            if (!muted)
+                cinematic.PlayOneShot(reason == "slip" ? cSlipFall : cExhaustedBreath,
+                    Gain(reason == "slip" ? 0.72f : 0.78f, CinematicSfxGain));
         }
 
         public void EnterDefeatPhase(DefeatPhase phase)
@@ -88,17 +98,20 @@ namespace EndlessSisyphus
             switch (phase)
             {
                 case DefeatPhase.StoneRoll:
-                    if (!muted) cinematic.PlayOneShot(cDefeatRoll, 0.62f);
+                    if (!muted) cinematic.PlayOneShot(cDefeatRoll,
+                        Gain(0.62f, CinematicSfxGain));
                     break;
                 case DefeatPhase.Look:
                     droneTarget = 0.12f;
                     melodyTarget = 0f;
-                    if (!muted) cinematic.PlayOneShot(cDefeatLook, 0.48f);
+                    if (!muted) cinematic.PlayOneShot(cDefeatLook,
+                        Gain(0.48f, CinematicSfxGain));
                     break;
                 case DefeatPhase.Descend:
                     droneTarget = 0.16f;
                     melodyTarget = 0f;
-                    if (!muted) cinematic.PlayOneShot(cDefeatDescent, 0.52f);
+                    if (!muted) cinematic.PlayOneShot(cDefeatDescent,
+                        Gain(0.52f, CinematicSfxGain));
                     break;
             }
         }
@@ -113,9 +126,22 @@ namespace EndlessSisyphus
         {
             if (muted) return;
             if (windClip == null) windClip = BuildWind();
-            wind.clip = windClip; wind.volume = 0.2f; if (!wind.isPlaying) wind.Play();
+            wind.clip = windClip;
+            wind.volume = Gain(0.24f, NatureSfxGain);
+            if (!wind.isPlaying) wind.Play();
         }
         public void WindStop() { wind.Stop(); wind.volume = 0f; }
+
+        public void RainStart(int variant)
+        {
+            if (muted) return;
+            if (rainClip == null) rainClip = BuildRain();
+            rain.clip = rainClip;
+            rain.pitch = 0.94f + Mathf.Clamp(variant, 0, 2) * 0.04f;
+            rain.volume = Gain(0.20f + Mathf.Clamp(variant, 0, 2) * 0.025f, NatureSfxGain);
+            if (!rain.isPlaying) rain.Play();
+        }
+        public void RainStop() { rain.Stop(); rain.volume = 0f; }
 
         /// <summary>Полная остановка всего звука — для контрактного выхода по MenuButton.</summary>
         public void StopAll()
@@ -125,6 +151,7 @@ namespace EndlessSisyphus
             sfx.Stop();
             cinematic.Stop();
             wind.Stop(); wind.volume = 0f;
+            rain.Stop(); rain.volume = 0f;
             musicOn = false;
             // AudioListener.volume — ГЛОБАЛЬНАЯ ручка на весь процесс: в лаунчере после нас
             // запускается следующая игра, и уйти из игры «замьюченным» значит унести с собой
@@ -133,14 +160,15 @@ namespace EndlessSisyphus
         }
 
         // ---- SFX ----
-        public void Push(float s) { if (!muted) sfx.PlayOneShot(cPush, Mathf.Clamp01(0.22f + 0.20f * s)); }
-        public void SteepPush(float s) { if (!muted) sfx.PlayOneShot(cSteepPush, Mathf.Clamp01(0.25f + 0.21f * s)); }
-        public void WindResistance(float s) { if (!muted) sfx.PlayOneShot(cWindPush, Mathf.Clamp01(0.36f + 0.28f * s)); }
-        public void Ice() { if (!muted) sfx.PlayOneShot(cIce, 0.30f); }
-        public void Friction() { if (!muted) sfx.PlayOneShot(cFriction, 0.30f); }
-        public void Error() { if (!muted) sfx.PlayOneShot(cError, 0.8f); }
-        public void Rumble() { if (!muted) sfx.PlayOneShot(cRumble, 0.9f); }
-        public void GameOver() { if (!muted) sfx.PlayOneShot(cGameover, 0.9f); }
+        public void Push(float s) { if (!muted) sfx.PlayOneShot(cPush, Gain(0.38f + 0.32f * s, GameplaySfxGain)); }
+        public void SteepPush(float s) { if (!muted) sfx.PlayOneShot(cSteepPush, Gain(0.44f + 0.34f * s, GameplaySfxGain)); }
+        public void WindResistance(float s) { if (!muted) sfx.PlayOneShot(cWindPush, Gain(0.28f + 0.24f * s, NatureSfxGain)); }
+        public void RainPush(float s) { if (!muted) sfx.PlayOneShot(cRainPush, Gain(0.34f + 0.28f * s, NatureSfxGain)); }
+        public void Ice() { if (!muted) sfx.PlayOneShot(cIce, Gain(0.18f, NatureSfxGain)); }
+        public void Friction() { if (!muted) sfx.PlayOneShot(cFriction, Gain(0.48f, NatureSfxGain)); }
+        public void Error() { if (!muted) sfx.PlayOneShot(cError, Gain(0.8f, CinematicSfxGain)); }
+        public void Rumble() { if (!muted) sfx.PlayOneShot(cRumble, Gain(0.9f, CinematicSfxGain)); }
+        public void GameOver() { if (!muted) sfx.PlayOneShot(cGameover, Gain(0.9f, CinematicSfxGain)); }
 
         // ============================================================ Синтез
         static AudioClip Make(string name, float[] buf)
@@ -148,6 +176,19 @@ namespace EndlessSisyphus
             var clip = AudioClip.Create(name, buf.Length, 1, SR, false);
             clip.SetData(buf, 0);
             return clip;
+        }
+
+        static float[] NormalizePeak(float[] buffer, float targetPeak, float maxBoost = 5f)
+        {
+            float peak = 0f;
+            for (int i = 0; i < buffer.Length; i++)
+                peak = Mathf.Max(peak, Mathf.Abs(buffer[i]));
+            if (peak < 0.0001f) return buffer;
+
+            float boost = Mathf.Min(maxBoost, targetPeak / peak);
+            for (int i = 0; i < buffer.Length; i++)
+                buffer[i] = Mathf.Clamp(buffer[i] * boost, -1f, 1f);
+            return buffer;
         }
 
         static float Saw(float freq, int i) { float p = (i * freq / SR) % 1f; return 2f * p - 1f; }
@@ -164,11 +205,14 @@ namespace EndlessSisyphus
 
         void BuildSfx()
         {
-            cPush = Make("push", SynthPush());
-            cSteepPush = Make("steep_push", SynthSteepPush());
-            cWindPush = Make("wind_resistance", SynthWindPush());
-            cIce = Make("ice", SynthIce());
-            cFriction = Make("friction", SynthFriction());
+            cPush = Make("push", NormalizePeak(SynthPush(), 0.72f));
+            cSteepPush = Make("steep_push", NormalizePeak(SynthSteepPush(), 0.78f));
+            cWindPush = Make("wind_resistance", NormalizePeak(SynthWindPush(), 0.70f));
+            cRainPush = Make("rain_push", NormalizePeak(SynthRainPush(), 0.70f));
+            cIce = Make("ice", NormalizePeak(SynthIce(), 0.62f));
+            cFriction = Make("friction", NormalizePeak(SynthFriction(), 0.66f));
+            cSlipFall = Make("slip_fall", SynthSlipFall());
+            cExhaustedBreath = Make("exhausted_breath", SynthExhaustedBreath());
             cError = Make("error", SynthError());
             cRumble = Make("rumble", SynthRumble());
             cGameover = Make("gameover", SynthGameover());
@@ -202,7 +246,7 @@ namespace EndlessSisyphus
         // Тот же жест, что у обычного толчка, но ниже, тяжелее и без высокого скрежета.
         float[] SynthSteepPush()
         {
-            int n = (int)(0.36f * SR);
+            int n = (int)(0.44f * SR);
             var contact = new float[n];
             var b = new float[n];
             for (int i = 0; i < n; i++) contact[i] = Noise();
@@ -210,54 +254,77 @@ namespace EndlessSisyphus
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)SR;
-                float bodyEnv = Mathf.Min(t / 0.036f, 1f) * Mathf.Exp(-t * 6.2f);
-                float contactEnv = Mathf.Min(t / 0.012f, 1f) * Mathf.Exp(-t * 13f);
-                float body = Mathf.Sin(2f * Mathf.PI * 41.20f * t) +
-                    0.48f * Mathf.Sin(2f * Mathf.PI * 61.74f * t) +
-                    0.16f * Mathf.Sin(2f * Mathf.PI * 82.41f * t);
-                b[i] = body * bodyEnv * 0.34f + contact[i] * contactEnv * 0.13f;
+                float bodyEnv = Mathf.Min(t / 0.042f, 1f) * Mathf.Exp(-t * 5.3f);
+                float contactEnv = Mathf.Min(t / 0.016f, 1f) * Mathf.Exp(-t * 10f);
+                float body = Mathf.Sin(2f * Mathf.PI * 36.71f * t) +
+                    0.55f * Mathf.Sin(2f * Mathf.PI * 55f * t) +
+                    0.20f * Mathf.Sin(2f * Mathf.PI * 82.41f * t);
+                float weightPulse = Mathf.Max(0f, Mathf.Sin(2f * Mathf.PI * 7.5f * t));
+                b[i] = body * bodyEnv * (0.37f + 0.07f * weightPulse) +
+                    contact[i] * contactEnv * 0.14f;
             }
-            LowPass(b, 245f);
+            LowPass(b, 220f);
             return b;
         }
 
-        // Сопротивление ветра — мягкий воздушный выброс с тихим E2 внутри.
+        // Сопротивление ветра — глухой низкий напор без резкого воздушного шипения.
         float[] SynthWindPush()
         {
-            int n = (int)(0.38f * SR);
+            int n = (int)(0.52f * SR);
             var air = new float[n];
             var b = new float[n];
             for (int i = 0; i < n; i++) air[i] = Noise();
-            LowPass(air, 760f);
+            LowPass(air, 180f);
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)SR;
-                float env = Mathf.Min(t / 0.045f, 1f) * Mathf.Exp(-t * 4.8f);
-                float breath = 0.68f + 0.32f * Mathf.Sin(2f * Mathf.PI * 3.2f * t);
-                float tone = Mathf.Sin(2f * Mathf.PI * 82.41f * t) * 0.11f;
-                b[i] = (air[i] * breath * 0.46f + tone) * env;
+                float env = Mathf.Min(t / 0.08f, 1f) * Mathf.Exp(-t * 3.7f);
+                float breath = 0.72f + 0.28f * Mathf.Sin(2f * Mathf.PI * 2.4f * t);
+                float hum = Mathf.Sin(2f * Mathf.PI * 55f * t) * 0.22f +
+                    Mathf.Sin(2f * Mathf.PI * 82.41f * t) * 0.08f;
+                b[i] = (air[i] * breath * 0.24f + hum) * env;
             }
+            LowPass(b, 210f);
+            return b;
+        }
+
+        // Дождевой толчок — отдельный влажный, приглушённый удар без звонких капель.
+        float[] SynthRainPush()
+        {
+            int n = (int)(0.40f * SR);
+            var rain = new float[n];
+            var b = new float[n];
+            for (int i = 0; i < n; i++) rain[i] = Noise();
+            LowPass(rain, 260f);
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)SR;
+                float env = Mathf.Min(t / 0.038f, 1f) * Mathf.Exp(-t * 5.8f);
+                float wetNoise = rain[i] * (0.58f + 0.42f * Mathf.Sin(2f * Mathf.PI * 5.2f * t));
+                float body = Mathf.Sin(2f * Mathf.PI * 65.41f * t) +
+                    0.26f * Mathf.Sin(2f * Mathf.PI * 98f * t);
+                b[i] = (body * 0.24f + wetNoise * 0.22f) * env;
+            }
+            LowPass(b, 280f);
             return b;
         }
 
         float[] SynthIce()
         {
-            int n = (int)(0.30f * SR);
-            var frost = new float[n];
+            const float duration = 0.44f;
+            int n = (int)(duration * SR);
+            var snow = new float[n];
             var b = new float[n];
-            for (int i = 0; i < n; i++) frost[i] = Noise();
-            LowPass(frost, 920f);
+            for (int i = 0; i < n; i++) snow[i] = Noise();
+            LowPass(snow, 620f);
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)SR;
-                float env = Mathf.Min(t / 0.018f, 1f) * Mathf.Exp(-t * 9.5f);
-                float glass = Mathf.Sin(2f * Mathf.PI * 329.63f * t) +
-                    0.34f * Mathf.Sin(2f * Mathf.PI * 493.88f * t) +
-                    0.12f * Mathf.Sin(2f * Mathf.PI * 659.26f * t);
-                float granular = frost[i] * (0.62f + 0.38f * Mathf.Sin(2f * Mathf.PI * 7f * t));
-                b[i] = (glass * 0.16f + granular * 0.12f) * env;
+                float env = Mathf.Min(t / 0.06f, 1f) * Mathf.Exp(-t * 4.8f);
+                float glide = Mathf.Sin(2f * Mathf.PI * 125f * t) * 0.06f;
+                b[i] = (snow[i] * 0.22f + glide) * env;
             }
-            LowPass(b, 1100f);
+            LowPass(b, 650f);
             return b;
         }
 
@@ -273,16 +340,68 @@ namespace EndlessSisyphus
 
         float[] SynthFriction()
         {
-            int n = (int)(0.24f * SR); var b = new float[n];
-            for (int i = 0; i < n; i++) b[i] = Noise();
-            LowPass(b, 240f);
+            const float duration = 0.42f;
+            int n = (int)(duration * SR);
+            var gravel = new float[n];
+            var b = new float[n];
+            for (int i = 0; i < n; i++) gravel[i] = Noise();
+            LowPass(gravel, 340f);
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)SR;
-                float env = Mathf.Min(t / 0.025f, 1f) * Mathf.Exp(-t * 9f);
-                float stoneTone = Mathf.Sin(2f * Mathf.PI * 82.41f * t) * 0.12f;
-                b[i] = (b[i] * 0.52f + stoneTone) * env;
+                float env = Mathf.Min(t / 0.025f, 1f) * Mathf.Exp(-t * 5.5f);
+                float grains = 0.30f + 0.70f *
+                    Mathf.Pow(Mathf.Max(0f, Mathf.Sin(2f * Mathf.PI * 13f * t)), 7f);
+                float body = Mathf.Sin(2f * Mathf.PI * 72f * t) * 0.09f;
+                b[i] = (gravel[i] * grains * 0.34f + body) * env;
             }
+            LowPass(b, 360f);
+            return b;
+        }
+
+        // Подскальзывание — короткое глухое падение тела на каменистую землю.
+        float[] SynthSlipFall()
+        {
+            int n = (int)(0.58f * SR);
+            var soil = new float[n];
+            var b = new float[n];
+            for (int i = 0; i < n; i++) soil[i] = Noise();
+            LowPass(soil, 190f);
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)SR;
+                float impact = Mathf.Exp(-t * 12f);
+                float settleT = Mathf.Max(0f, t - 0.13f);
+                float settle = t >= 0.13f ? Mathf.Exp(-settleT * 15f) : 0f;
+                float body = Mathf.Sin(2f * Mathf.PI * 46f * t) * impact +
+                    0.42f * Mathf.Sin(2f * Mathf.PI * 68f * settleT) * settle;
+                b[i] = body * 0.38f + soil[i] * (impact * 0.30f + settle * 0.16f);
+            }
+            LowPass(b, 230f);
+            return b;
+        }
+
+        // Иссякание сил — длинный низкий выдох, а не удар или сигнал ошибки.
+        float[] SynthExhaustedBreath()
+        {
+            const float duration = 1.45f;
+            int n = (int)(duration * SR);
+            var breath = new float[n];
+            var b = new float[n];
+            for (int i = 0; i < n; i++) breath[i] = Noise();
+            LowPass(breath, 520f);
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)SR;
+                float p = t / duration;
+                float env = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / 0.16f)) *
+                    Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((duration - t) / 0.42f));
+                float frequency = Mathf.Lerp(78f, 48f, p);
+                float chest = Mathf.Sin(2f * Mathf.PI * frequency * t) * 0.15f;
+                float exhale = breath[i] * (0.28f + 0.10f * Mathf.Sin(2f * Mathf.PI * 1.7f * t));
+                b[i] = (exhale + chest) * env;
+            }
+            LowPass(b, 480f);
             return b;
         }
 
@@ -385,13 +504,59 @@ namespace EndlessSisyphus
 
         AudioClip BuildWind()
         {
-            int n = (int)(1.2f * SR); var b = new float[n];
-            for (int i = 0; i < n; i++) b[i] = Noise();
-            LowPass(b, 700f);
-            // сгладить края для бесшовного лупа
-            int fade = 2000;
-            for (int i = 0; i < fade; i++) { float k = i / (float)fade; b[i] *= k; b[n - 1 - i] *= k; }
-            return Make("wind", b);
+            const float duration = 5.6f;
+            int n = (int)(duration * SR);
+            var air = new float[n];
+            var b = new float[n];
+            for (int i = 0; i < n; i++) air[i] = Noise();
+            LowPass(air, 230f);
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)SR;
+                float p = t / duration;
+                float mainGust = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(Mathf.PI * p)), 1.65f);
+                float secondGust = Mathf.Pow(Mathf.Max(0f, Mathf.Sin(2f * Mathf.PI * p)), 2.2f);
+                float gust = 0.06f + mainGust * 0.68f + secondGust * 0.15f;
+                float windowHum = (Mathf.Sin(2f * Mathf.PI * 48f * t) +
+                    0.32f * Mathf.Sin(2f * Mathf.PI * 72f * t)) * mainGust * 0.07f;
+                b[i] = air[i] * gust * 0.34f + windowHum;
+            }
+            LowPass(b, 260f);
+            int fade = (int)(0.22f * SR);
+            for (int i = 0; i < fade; i++)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, i / (float)fade);
+                b[i] *= k;
+                b[n - 1 - i] *= k;
+            }
+            return Make("wind", NormalizePeak(b, 0.48f));
+        }
+
+        AudioClip BuildRain()
+        {
+            const float duration = 4.8f;
+            int n = (int)(duration * SR);
+            var water = new float[n];
+            var b = new float[n];
+            for (int i = 0; i < n; i++) water[i] = Noise();
+            LowPass(water, 680f);
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)SR;
+                float swell = 0.72f + 0.18f * Mathf.Sin(2f * Mathf.PI * 0.34f * t) +
+                    0.10f * Mathf.Sin(2f * Mathf.PI * 0.71f * t + 1.2f);
+                float lowBody = Mathf.Sin(2f * Mathf.PI * 58f * t) * 0.035f;
+                b[i] = water[i] * swell * 0.30f + lowBody;
+            }
+            LowPass(b, 720f);
+            int fade = (int)(0.20f * SR);
+            for (int i = 0; i < fade; i++)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, i / (float)fade);
+                b[i] *= k;
+                b[n - 1 - i] *= k;
+            }
+            return Make("rain_ambience", NormalizePeak(b, 0.44f));
         }
 
         static int MusicSampleCount()
