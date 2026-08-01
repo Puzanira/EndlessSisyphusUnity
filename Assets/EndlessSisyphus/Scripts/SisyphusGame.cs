@@ -56,6 +56,7 @@ namespace EndlessSisyphus
         public float WindExitGrace;
         float wrongSteepComboTimer;
         float wrongSteepLastUseTime = float.NegativeInfinity;
+        float wrongSteepLastPenaltyTime = float.NegativeInfinity;
         public float StoneAngle, StoneSpinVel;
         public bool IntroActive;
         public float IntroT;
@@ -279,6 +280,7 @@ namespace EndlessSisyphus
             WindExitGrace = 0;
             wrongSteepComboTimer = 0;
             wrongSteepLastUseTime = float.NegativeInfinity;
+            wrongSteepLastPenaltyTime = float.NegativeInfinity;
             IcePatches.Clear();
             SteepPatches.Clear();
             RainVariant = WindVariant = 0;
@@ -311,9 +313,20 @@ namespace EndlessSisyphus
                 if (now - wrongSteepLastUseTime > GameConfig.WrongSteepComboWindow)
                     wrongSteepComboTimer = 0f;
                 wrongSteepLastUseTime = now;
-                if (wrongSteepComboTimer >= GameConfig.WrongSteepComboGrace)
+                // Цена «за нажатие» посчитана автором под КЛАВИАТУРУ (человек жмёт Space
+                // несколько раз в секунду). У автомата «толчок» — это каждые
+                // CrankDegreesPerPush градусов крутилки, на живой скорости десятки толчков
+                // в секунду: та же четвёрка за толчок превращалась в сотни единиц сил в
+                // секунду и сжигала игрока на подъезде к склону — с зажатым «!», то есть
+                // ровно за то, что он делает по подсказке «КРУТОЙ СКЛОН — ! + КРУТИ».
+                // Поэтому заряжаем штраф не чаще одного «идеального» толчка.
+                if (wrongSteepComboTimer >= GameConfig.WrongSteepComboGrace &&
+                    now - wrongSteepLastPenaltyTime >= GameConfig.IdealInterval)
+                {
+                    wrongSteepLastPenaltyTime = now;
                     Stamina = Mathf.Max(0f, Stamina -
                         GameConfig.ErrWrongSteepComboTap * Set.DrainMul);
+                }
             }
             else if (!IsOnSteep)
             {
@@ -635,6 +648,7 @@ namespace EndlessSisyphus
             SpaceDown = ShiftDown = Careful = CarefulBad = false;
             wrongSteepComboTimer = 0f;
             wrongSteepLastUseTime = float.NegativeInfinity;
+            wrongSteepLastPenaltyTime = float.NegativeInfinity;
             Shake = 0.65f;
             StoneSpinVel = -1.2f;
             audioEngine.WindStop();
