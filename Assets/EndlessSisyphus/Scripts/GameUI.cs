@@ -18,6 +18,14 @@ namespace EndlessSisyphus
         /// код его и не проверяет (крутить можно в любую сторону).</summary>
         public const string CrankStartHint = "Крути крутилку, чтобы толкать камень.";
 
+        /// <summary>Подписи кнопок экранов. Вынесены в константы не ради переиспользования —
+        /// каждая используется ровно один раз, — а чтобы тест подсветки имён органов
+        /// (<c>HintHighlightTests</c>) проверял ту же строку, которую игрок читает на экране,
+        /// а не свою копию. Слова не менялись.</summary>
+        public const string StartButtonLabel = "ЗЕЛЁНАЯ КНОПКА — НАЧАТЬ";
+        /// <inheritdoc cref="StartButtonLabel"/>
+        public const string RestartButtonLabel = "ЗЕЛЁНАЯ КНОПКА — ЗАНОВО";
+
         /// <summary>
         /// Эпиграф. Со стартового экрана снят (f7479a6) и по решению основательницы
         /// переехал в начало забега: он идёт поверх вступительной анимации, пока Сизиф
@@ -148,6 +156,37 @@ namespace EndlessSisyphus
             style.onFocused.background = background;
         }
 
+        /// <summary>
+        /// Кнопка экрана, в подписи которой имя цветной кнопки стойки покрашено в её цвет
+        /// («ЗЕЛЁНАЯ КНОПКА — НАЧАТЬ»).
+        ///
+        /// Подпись рисуется отдельно от кнопки: GUI.Button красит свой текст целиком одним
+        /// цветом состояния, а покрасить надо кусок. Поэтому кнопка рисуется пустой (фон,
+        /// рамка и клик — её), а текст кладётся поверх посимвольно тем же способом, что и
+        /// на плашках подсказок. Указателя у стойки нет, кнопка всегда в состоянии normal,
+        /// так что цвет подписи берём из него.
+        /// </summary>
+        bool OrganButton(Rect rect, string text, GUIStyle style)
+        {
+            bool pressed = GUI.Button(rect, GUIContent.none, style);
+            Color baseColor = style.normal.textColor;
+            var labelStyle = PassiveText(new GUIStyle(GUI.skin.label)
+            {
+                font = style.font,
+                fontSize = style.fontSize,
+                fontStyle = style.fontStyle,
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = false,
+                clipping = TextClipping.Overflow,
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0),
+                overflow = new RectOffset(0, 0, 0, 0),
+                normal = { textColor = baseColor }
+            });
+            TrackedLabel(rect, text, labelStyle, 0f, HintTextColors(text, baseColor));
+            return pressed;
+        }
+
         static GUIStyle PassiveText(GUIStyle source)
         {
             var style = new GUIStyle(source);
@@ -181,7 +220,19 @@ namespace EndlessSisyphus
             return TextAnchor.UpperLeft;
         }
 
-        void TrackedLabel(Rect rect, string text, GUIStyle style, float tracking)
+        void TrackedLabel(Rect rect, string text, GUIStyle style, float tracking) =>
+            TrackedLabel(rect, text, style, tracking, null);
+
+        /// <summary>
+        /// Строка посимвольно, с трекингом и — необязательно — со своим цветом у каждого
+        /// символа (<paramref name="colors"/>; null = вся строка цветом стиля).
+        ///
+        /// Посимвольный цвет здесь не роскошь, а единственный доступный способ: имена
+        /// цветных кнопок стойки красятся НА ОТРИСОВКЕ, а не разметкой в тексте (почему —
+        /// см. <see cref="HintTextColors"/>), и красить надо кусок строки, а не строку
+        /// целиком. Метрика от цвета не зависит, поэтому раскладка плашек не едет.
+        /// </summary>
+        void TrackedLabel(Rect rect, string text, GUIStyle style, float tracking, Color[] colors)
         {
             var glyphStyle = new GUIStyle(style)
             {
@@ -202,6 +253,11 @@ namespace EndlessSisyphus
 
             for (int i = 0; i < text.Length; i++)
             {
+                if (colors != null && i < colors.Length && glyphStyle.normal.textColor != colors[i])
+                {
+                    glyphStyle.normal.textColor = colors[i];
+                    LockPassiveStates(glyphStyle);
+                }
                 string character = text[i].ToString();
                 float glyphWidth = glyphStyle.CalcSize(new GUIContent(character)).x;
                 GUI.Label(new Rect(x, rect.y, glyphWidth + tracking + 3f, rect.height), character, glyphStyle);
@@ -248,7 +304,16 @@ namespace EndlessSisyphus
             GUI.matrix = oldMatrix;
         }
 
-        void TrackedOutlinedLabel(Rect rect, string text, GUIStyle style, float tracking, float stroke, Color strokeColor)
+        /// <summary>
+        /// Строка с обводкой. Обводка всегда одноцветная (<paramref name="strokeColor"/>) —
+        /// она отрывает глиф от фона; цвет несёт только сама строка, и именно поэтому
+        /// <paramref name="colors"/> применяется лишь к последнему, «лицевому» проходу.
+        ///
+        /// Параметр обязательный, без перегрузки без него: подсветка имён кнопок обязана
+        /// доезжать до отрисовки, а не теряться молча на полпути.
+        /// </summary>
+        void TrackedOutlinedLabel(Rect rect, string text, GUIStyle style, float tracking, float stroke,
+            Color strokeColor, Color[] colors)
         {
             var outlineStyle = PassiveText(new GUIStyle(style));
             outlineStyle.normal.textColor = strokeColor;
@@ -256,7 +321,7 @@ namespace EndlessSisyphus
             TrackedLabel(new Rect(rect.x + stroke, rect.y, rect.width, rect.height), text, outlineStyle, tracking);
             TrackedLabel(new Rect(rect.x, rect.y - stroke, rect.width, rect.height), text, outlineStyle, tracking);
             TrackedLabel(new Rect(rect.x, rect.y + stroke, rect.width, rect.height), text, outlineStyle, tracking);
-            TrackedLabel(rect, text, style, tracking);
+            TrackedLabel(rect, text, style, tracking, colors);
         }
 
         float TrackedTextWidth(string text, GUIStyle style, float tracking)
@@ -815,7 +880,7 @@ namespace EndlessSisyphus
         // Ранний вариант «подложки» основательница забраковала, но браковала она КРАСНЫЙ цвет
         // бейджа (перекрашен в золото, см. RainGuardColor), а не саму плашку: живьём она
         // просит ровно обратное — единый вид.
-
+        //
         // РАМКИ У ПЛАШЕК БОЛЬШЕ НЕТ. Золотую обводку сняла основательница («у текста убрать
         // рамки у текста»): на кадре она превращала каждую подсказку в отдельное «окно»
         // поверх пейзажа, спорила с золотом самого текста и тянула взгляд на края, а не на
@@ -839,6 +904,144 @@ namespace EndlessSisyphus
         /// <summary>Цвет подсказки первого действия — золото игры.</summary>
         public static readonly Color HintPlateCrankText = new Color(1f, 0.8f, 0.2f);
 
+        // ─── Имена цветных кнопок — цветом самой кнопки ────────────────────────────────
+        //
+        // Решение основательницы: «кнопки которые нужно нажимать выделить цветом в тексте».
+        // Игрок стоит у стойки, где кнопки физически жёлтая, зелёная и красная (наклейки
+        // заказаны). Если слово «жёлтую» в подсказке написано тем же кремовым, что и весь
+        // текст, связь «слово на экране ↔ железка под рукой» игрок достраивает сам и не
+        // всегда быстро. Покрашенное слово эту связь отдаёт мгновенно.
+        //
+        // ПОЧЕМУ НА ОТРИСОВКЕ, А НЕ РАЗМЕТКОЙ В ТЕКСТЕ. У GUIStyle есть richText, и соблазн
+        // написать «нажми <color=#…>красную кнопку</color>» прямо в строке велик. Так делать
+        // нельзя по трём причинам, и каждой хватило бы отдельно:
+        //   1. Строки подсказок утверждала основательница, и на них стоят тесты, сверяющие
+        //      их посимвольно (HintPlatesTests.HintWording_IsUntouched). Разметка в константе
+        //      означала бы, что текст игры больше не равен тому, что она утверждала.
+        //   2. Плашка меряет и переносит строку сама (WrapHintText/TrackedTextWidth), а меряет
+        //      она ПОСИМВОЛЬНО. Теги попали бы в замер как обычные буквы, и раскладка поехала
+        //      бы ровно на их длину.
+        //   3. Строки рисуются посимвольно (TrackedLabel), то есть richText до них и не дошёл
+        //      бы: теги вывелись бы на экран как текст.
+        // Поэтому цвет считается отдельно от текста — по самому тексту (HintTextColors) —
+        // и применяется в момент отрисовки. Константы строк не тронуты ни одной буквой.
+        //
+        // Крутилка, датчики и кнопка меню НЕ красятся: на стойке у них цвета нет, и выдумать
+        // им код значило бы обещать игроку несуществующую подсказку. Они идут основным цветом
+        // строки, как и раньше.
+
+        /// <summary>Жёлтая кнопка. Лимонный, а не золото игры: золото на плашках уже занято
+        /// значением «от тебя нужно действие», и слово-имя органа обязано от него отличаться.</summary>
+        public static readonly Color OrganYellow = new Color(1f, 0.89f, 0.23f);
+        /// <summary>Зелёная кнопка. Светлая трава: на ночной подложке живая, с бирюзой бейджа
+        /// защиты (0.49, 0.94, 0.82) не путается — у той синий канал вдвое выше.</summary>
+        public static readonly Color OrganGreen = new Color(0.45f, 0.92f, 0.45f);
+        /// <summary>Красная кнопка. Не чистый красный: (1,0,0) на тёмной подложке почти не
+        /// светлее её самой (относительная яркость 0.21) и читается как грязное пятно — это
+        /// ровно та беда, за которую основательница забраковала красный бейдж защиты. Взят
+        /// осветлённый тёплый красный: яркость втрое выше, а красным он остаётся однозначно —
+        /// зелёный и синий каналы вдвое с лишним ниже красного.</summary>
+        public static readonly Color OrganRed = new Color(1f, 0.40f, 0.33f);
+
+        /// <summary>Основа имени органа: прилагательное-цвет + существительное «кнопка» в
+        /// любой падежной форме («жёлтую кнопку», «ЗЕЛЁНАЯ КНОПКА», «красную кнопку»).</summary>
+        const string OrganNounStem = "кнопк";
+
+        static readonly string[] OrganStems = { "жёлт", "зелён", "красн" };
+        static readonly Color[] OrganStemColors = { OrganYellow, OrganGreen, OrganRed };
+
+        /// <summary>
+        /// Цвет каждого символа строки: по умолчанию <paramref name="baseColor"/>, а на имени
+        /// цветной кнопки — цвет этой кнопки. Функция чистая и по этому же тексту считается
+        /// и в тесте — подсветку нельзя потерять молча.
+        ///
+        /// Красится ЦЕЛИКОМ словосочетание «прилагательное + кнопка», а не одно прилагательное:
+        /// игрок ищет глазами кнопку, и обрывать подсветку на «красную» значит подсвечивать
+        /// половину имени органа.
+        /// </summary>
+        public static Color[] HintTextColors(string text, Color baseColor)
+        {
+            var colors = new Color[string.IsNullOrEmpty(text) ? 0 : text.Length];
+            for (int i = 0; i < colors.Length; i++) colors[i] = baseColor;
+            if (colors.Length == 0) return colors;
+
+            // Регистр строк разный («жёлтую кнопку» в баннере, «ЗЕЛЁНАЯ КНОПКА» на кнопке
+            // экрана), поэтому ищем по нижнему регистру. Для кириллицы ToLowerInvariant
+            // длину строки не меняет, так что индексы остаются индексами исходного текста.
+            string lower = text.ToLowerInvariant();
+
+            for (int s = 0; s < OrganStems.Length; s++)
+            {
+                string stem = OrganStems[s];
+                int from = 0;
+                while (from <= lower.Length - stem.Length)
+                {
+                    int at = lower.IndexOf(stem, from, System.StringComparison.Ordinal);
+                    if (at < 0) break;
+                    from = at + stem.Length;
+
+                    if (at > 0 && char.IsLetter(lower[at - 1])) continue;   // середина чужого слова
+
+                    int adjectiveEnd = WordEnd(lower, at);
+                    int nounStart = adjectiveEnd;
+                    while (nounStart < lower.Length && lower[nounStart] == ' ') nounStart++;
+                    if (nounStart == adjectiveEnd) continue;                // слова не разделены
+                    if (!StartsWithAt(lower, nounStart, OrganNounStem)) continue;
+
+                    int nounEnd = WordEnd(lower, nounStart);
+                    for (int c = at; c < nounEnd; c++) colors[c] = OrganStemColors[s];
+                    from = nounEnd;
+                }
+            }
+            return colors;
+        }
+
+        static int WordEnd(string text, int start)
+        {
+            int end = start;
+            while (end < text.Length && char.IsLetter(text[end])) end++;
+            return end;
+        }
+
+        static bool StartsWithAt(string text, int at, string value)
+        {
+            if (at + value.Length > text.Length) return false;
+            for (int i = 0; i < value.Length; i++)
+                if (text[at + i] != value[i]) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Цвета символов, разложенные по строкам уже перенесённой подсказки.
+        ///
+        /// Считаются по ЦЕЛОМУ тексту, а потом нарезаются по строкам, а не считаются в каждой
+        /// строке заново: перенос может разорвать имя органа пополам («…держи жёлтую» /
+        /// «кнопку и продолжай…»), и построчный поиск такую половинку уже не узнает —
+        /// подсветка потерялась бы ровно на самых длинных подсказках.
+        /// </summary>
+        public static Color[][] HintLineColors(string text, string[] lines, Color baseColor)
+        {
+            Color[] all = HintTextColors(text, baseColor);
+            var result = new Color[lines.Length][];
+            int cursor = 0;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var lineColors = new Color[lines[i].Length];
+                int at = text == null ? -1 : text.IndexOf(lines[i], cursor, System.StringComparison.Ordinal);
+                if (at < 0)
+                {
+                    for (int c = 0; c < lineColors.Length; c++) lineColors[c] = baseColor;
+                }
+                else
+                {
+                    System.Array.Copy(all, at, lineColors, 0, lineColors.Length);
+                    cursor = at + lineColors.Length;
+                }
+                result[i] = lineColors;
+            }
+            return result;
+        }
+
         public static float HintPlatePadX(float scale) => 30f * scale;
         public static float HintPlatePadY(float scale) => 16f * scale;
         public static float HintPlateLineHeight(int fontSize) => fontSize * 1.45f;
@@ -856,10 +1059,17 @@ namespace EndlessSisyphus
             public readonly Color TextColor;
             public readonly int FontSize;
             public readonly Rect Box;
+            /// <summary>Цвет каждого символа каждой строки: <see cref="TextColor"/> везде, кроме
+            /// имён цветных кнопок стойки — там цвет самой кнопки (см. <see cref="HintTextColors"/>).
+            /// Лежит в раскладке, а не считается на отрисовке, чтобы подсветку можно было
+            /// проверить тестом на том же пути, которым её рисуют.</summary>
+            public readonly Color[][] LineColors;
 
-            public HintPlate(string id, string text, string[] lines, Color textColor, int fontSize, Rect box)
+            public HintPlate(string id, string text, string[] lines, Color textColor, int fontSize, Rect box,
+                Color[][] lineColors)
             {
                 Id = id; Text = text; Lines = lines; TextColor = textColor; FontSize = fontSize; Box = box;
+                LineColors = lineColors;
             }
         }
 
@@ -951,7 +1161,8 @@ namespace EndlessSisyphus
             float boxH = lines.Length * HintPlateLineHeight(fontSize) + padY * 2f;
             float y = anchorBottom ? edgeY - boxH : edgeY;
             return new HintPlate(id, text, lines, textColor, fontSize,
-                new Rect(centerX - boxW * 0.5f, y, boxW, boxH));
+                new Rect(centerX - boxW * 0.5f, y, boxW, boxH),
+                HintLineColors(text, lines, textColor));
         }
 
         /// <summary>
@@ -1030,7 +1241,8 @@ namespace EndlessSisyphus
                 TrackedOutlinedLabel(
                     new Rect(plate.Box.x + padX, plate.Box.y + padY + i * lineHeight,
                         plate.Box.width - padX * 2f, lineHeight),
-                    plate.Lines[i], style, tracking, stroke, HintPlateStroke);
+                    plate.Lines[i], style, tracking, stroke, HintPlateStroke,
+                    plate.LineColors != null && i < plate.LineColors.Length ? plate.LineColors[i] : null);
         }
 
         /// <summary>
@@ -1169,7 +1381,7 @@ namespace EndlessSisyphus
                 fontSize = Mathf.Max(17, Mathf.RoundToInt(19f * scale)),
                 fontStyle = FontStyle.Normal
             };
-            if (GUI.Button(new Rect(buttonX, top + 160f * scale, buttonW, 50f * scale), "ЗЕЛЁНАЯ КНОПКА — НАЧАТЬ", startButton)) game.StartGame();
+            if (OrganButton(new Rect(buttonX, top + 160f * scale, buttonW, 50f * scale), StartButtonLabel, startButton)) game.StartGame();
 
             // Нижняя строка органов («КРУТИЛКА — толкать · ЗЕЛЁНАЯ КНОПКА — начать ·
             // КНОПКА МЕНЮ — выход») снята целиком по решению основательницы. Экран и так
@@ -1317,7 +1529,7 @@ namespace EndlessSisyphus
             DrawStoneQuoteAt(defeatQuoteRect, DefeatQuote, 1f);
 
             float actionsY = defeatQuoteRect.yMax + 18f * scale;
-            if (GUI.Button(new Rect(x, actionsY, width, 52f * scale), "ЗЕЛЁНАЯ КНОПКА — ЗАНОВО", btn)) game.StartGame();
+            if (OrganButton(new Rect(x, actionsY, width, 52f * scale), RestartButtonLabel, btn)) game.StartGame();
             // Вторичной кнопки «В МЕНЮ» на автомате нет: указателя у стойки нет, а выход
             // с экрана — физическая кнопка меню (контракт автомата), она же возвращает в лаунчер.
             PassiveLabel(new Rect(x, actionsY + 62f * scale, width, 30f * scale), "КНОПКА МЕНЮ — выход", overRecord);
