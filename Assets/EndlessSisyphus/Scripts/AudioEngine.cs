@@ -20,6 +20,7 @@ namespace EndlessSisyphus
         readonly AudioSource drone, melody, sfx, wind, rain, cinematic;
         bool musicOn, muted;
         float droneTarget = 0.4f, melodyTarget = 0.4f;
+        float lastTapSfxTime = float.NegativeInfinity;
 
         AudioClip droneClip, melodyClip, windClip, rainClip;
         AudioClip cPush, cSteepPush, cWindPush, cRainPush, cIce, cFriction;
@@ -50,7 +51,52 @@ namespace EndlessSisyphus
             wind = host.AddComponent<AudioSource>(); wind.loop = true; wind.playOnAwake = false; wind.volume = 0f;
             rain = host.AddComponent<AudioSource>(); rain.loop = true; rain.playOnAwake = false; rain.volume = 0f;
             cinematic = host.AddComponent<AudioSource>(); cinematic.playOnAwake = false; cinematic.volume = 1f;
+
+            // Приоритет голоса: 0 — «не отнимать никогда», 256 — «отнять первым».
+            // Пул реальных голосов Unity ограничен (ProjectSettings/AudioManager,
+            // m_RealVoiceCount = 32); когда он переполнен, движок ГЛУШИТ (виртуализует)
+            // наименее слышные голоса. Музыка — самый тихий непрерывный звук в игре
+            // (0.4 против ~0.7 у толчков), поэтому без явных приоритетов первой пропадала
+            // именно она. Замерено в живом плеере: на быстрой крутилке drone и melody
+            // уходят в isVirtual, а игрок слышит это как «звук выпал».
+            drone.priority = 0;
+            melody.priority = 0;
+            cinematic.priority = 32;     // кинематографические акценты поражения
+            wind.priority = 64;
+            rain.priority = 64;
+            sfx.priority = 200;          // толчки — расходный материал, их и отнимать
+
             BuildSfx();
+        }
+
+        /// <summary>Приоритет голосов музыки (0 — самый защищённый). Гард теста.</summary>
+        public int MusicVoicePriority => Mathf.Max(drone.priority, melody.priority);
+
+        /// <summary>Приоритет голоса толчковых SFX. Гард теста.</summary>
+        public int TapSfxVoicePriority => sfx.priority;
+
+        /// <summary>Сколько толчковых one-shot'ов реально прозвучало. Гард теста.</summary>
+        public int TapSfxPlayed { get; private set; }
+
+        /// <summary>
+        /// Пропускать ли звук очередного толчка. Крутилка автомата выдаёт ДЕСЯТКИ толчков
+        /// в секунду (клавиатурный оригинал автора — единицы), и каждый стрелял своим
+        /// 0.26-секундным one-shot'ом: на быстром вращении в пуле одновременно жили два-три
+        /// десятка копий ОДНОГО клипа. Замер в живом плеере (1920×1080, macOS): при 2700 °/с
+        /// пик микса 1.7, при 4000 °/с — 3.56 (грубый клиппинг), и голоса музыки
+        /// виртуализованы в 44 замерах из 44. Различить эти толчки на слух всё равно нельзя.
+        /// Поэтому звук толчка не чаще, чем игра сама считает толчок толчком: порог
+        /// «долбёжки» <see cref="GameConfig.MashInterval"/>. На человеческом ритме
+        /// (IdealInterval 0.34 с) звучит КАЖДЫЙ толчок — правка режет только вращение.
+        /// Игровой эффект толчка (импульс, стамина, штрафы) не трогается вовсе.
+        /// </summary>
+        bool TapSfxAllowed()
+        {
+            float now = Time.unscaledTime;
+            if (now - lastTapSfxTime < GameConfig.MashInterval) return false;
+            lastTapSfxTime = now;
+            TapSfxPlayed++;
+            return true;
         }
 
         // ---- управление ----
@@ -160,10 +206,12 @@ namespace EndlessSisyphus
         }
 
         // ---- SFX ----
-        public void Push(float s) { if (!muted) sfx.PlayOneShot(cPush, Gain(0.38f + 0.32f * s, GameplaySfxGain)); }
-        public void SteepPush(float s) { if (!muted) sfx.PlayOneShot(cSteepPush, Gain(0.44f + 0.34f * s, GameplaySfxGain)); }
-        public void WindResistance(float s) { if (!muted) sfx.PlayOneShot(cWindPush, Gain(0.28f + 0.24f * s, NatureSfxGain)); }
-        public void RainPush(float s) { if (!muted) sfx.PlayOneShot(cRainPush, Gain(0.34f + 0.28f * s, NatureSfxGain)); }
+        // Толчковые звуки идут через TapSfxAllowed: их поток задаёт крутилка, и без
+        // прореживания они выедали пул голосов вместе с музыкой (см. TapSfxAllowed).
+        public void Push(float s) { if (!muted && TapSfxAllowed()) sfx.PlayOneShot(cPush, Gain(0.38f + 0.32f * s, GameplaySfxGain)); }
+        public void SteepPush(float s) { if (!muted && TapSfxAllowed()) sfx.PlayOneShot(cSteepPush, Gain(0.44f + 0.34f * s, GameplaySfxGain)); }
+        public void WindResistance(float s) { if (!muted && TapSfxAllowed()) sfx.PlayOneShot(cWindPush, Gain(0.28f + 0.24f * s, NatureSfxGain)); }
+        public void RainPush(float s) { if (!muted && TapSfxAllowed()) sfx.PlayOneShot(cRainPush, Gain(0.34f + 0.28f * s, NatureSfxGain)); }
         public void Ice() { if (!muted) sfx.PlayOneShot(cIce, Gain(0.18f, NatureSfxGain)); }
         public void Friction() { if (!muted) sfx.PlayOneShot(cFriction, Gain(0.48f, NatureSfxGain)); }
         public void Error() { if (!muted) sfx.PlayOneShot(cError, Gain(0.8f, CinematicSfxGain)); }
