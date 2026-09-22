@@ -302,9 +302,39 @@ namespace EndlessSisyphus
             float labelWidth = TrackedTextWidth(label, left, labelTracking);
             float valueWidth = TrackedTextWidth(value, right, valueTracking);
             float total = labelWidth + gap + valueWidth;
-            float x = alignRight ? rect.xMax - total : rect.x + (rect.width - total) * 0.5f;
+            // Старт метрики кладём на целую координату: на пиксельном пути (см. PixelDrawMetric)
+            // половинка единицы — это половина «крупного» пикселя, и весь блок расплывается.
+            float x = Mathf.Round(alignRight ? rect.xMax - total : rect.x + (rect.width - total) * 0.5f);
             TrackedLabel(new Rect(x, rect.y, labelWidth, rect.height), label, left, labelTracking);
             TrackedLabel(new Rect(x + labelWidth + gap, rect.y, valueWidth, rect.height), value, right, valueTracking);
+        }
+
+        /// <summary>
+        /// Пиксельный путь для метрики «подпись + значение» — то же, что <see cref="PixelTrackedLabel"/>
+        /// делает для одной строки. Пиксельный шрифт (PressStart2P) чёткий только тогда, когда его
+        /// растеризуют в мелком «логическом» кегле, а на экран увеличивают целой матрицей GUI: при
+        /// прямой отрисовке крупным кеглем Unity растягивает сглаженную битмапу атласа, и строка
+        /// выглядит мыльной рядом с заголовком, который через пиксельный путь уже идёт.
+        /// </summary>
+        void PixelDrawMetric(Rect rect, string label, string value, GUIStyle labelStyle, GUIStyle valueStyle,
+            float labelTracking, float valueTracking, float gap, bool alignRight, float pixelScale)
+        {
+            PreparePixelFont(labelStyle.font);
+            PreparePixelFont(valueStyle.font);
+            var pixelLabel = new GUIStyle(labelStyle)
+            {
+                fontSize = Mathf.Max(1, Mathf.RoundToInt(labelStyle.fontSize / pixelScale))
+            };
+            var pixelValue = new GUIStyle(valueStyle)
+            {
+                fontSize = Mathf.Max(1, Mathf.RoundToInt(valueStyle.fontSize / pixelScale))
+            };
+            var oldMatrix = GUI.matrix;
+            GUI.matrix = Matrix4x4.Scale(new Vector3(pixelScale, pixelScale, 1f)) * oldMatrix;
+            DrawMetric(PixelRect(rect, pixelScale), label, value, pixelLabel, pixelValue,
+                Mathf.Round(labelTracking / pixelScale), Mathf.Round(valueTracking / pixelScale),
+                Mathf.Round(gap / pixelScale), alignRight);
+            GUI.matrix = oldMatrix;
         }
 
         void DrawTitleDivider(float centerX, float y, float width, float scale)
@@ -1146,9 +1176,9 @@ namespace EndlessSisyphus
                 Mathf.Min(170f * scale, titleWidth * 0.30f), scale);
             PassiveLabel(new Rect(titleX, top + 78f * scale, titleWidth, 42f * scale),
                 game.FallReason == "slip" ? "Камень вырвался и покатился вниз." : "Руки опустились — камень скатился к подножию.", overReason);
-            DrawMetric(new Rect(x, top + 126f * scale, width, 50f * scale),
+            PixelDrawMetric(new Rect(x, top + 126f * scale, width, 50f * scale),
                 "ВЫСОТА", Roman.To(game.Height), overHeightLabel, overHeightValue,
-                2f * scale, 2f * scale, 10f * scale, false);
+                2f * scale, 2f * scale, 10f * scale, false, displayPixelScale);
             TrackedLabel(new Rect(x, top + 180f * scale, width, 30f * scale), "РЕКОРД  " + Roman.To(game.Best), overRecord, 1.5f * scale);
             if (game.IsRecordScreen)
                 PassiveLabel(new Rect(x, top + 208f * scale, width, 30f * scale), "★ НОВЫЙ РЕКОРД ★",
