@@ -18,6 +18,17 @@ namespace EndlessSisyphus
         /// код его и не проверяет (крутить можно в любую сторону).</summary>
         public const string CrankStartHint = "Крути крутилку, чтобы толкать камень.";
 
+        /// <summary>
+        /// Эпиграф. Со стартового экрана снят (f7479a6) и по решению основательницы
+        /// переехал в начало забега: он идёт поверх вступительной анимации, пока Сизиф
+        /// подходит к камню, и гаснет ровно к её концу — там, где оживает крутилка и
+        /// загорается <see cref="CrankStartHint"/>. Подача — тот же каменный слой, что у
+        /// цитат Камю по ходу подъёма (DrawStoneQuote), чтобы он читался как часть
+        /// литературного слоя игры, а не как вставка чужого экрана.
+        /// </summary>
+        public const string Epigraph =
+            "«Боги приговорили Сизифа вечно вкатывать на вершину горы камень, который, едва достигнув цели, скатывался вниз»";
+
         Texture2D white, marble, instructionTablet, quoteTablet, authorLogo, buttonNormal, buttonHover, buttonActive;
         Texture2D secondaryButtonNormal, secondaryButtonHover, secondaryButtonActive;
         Font displayFont, uiFont, uiStrongFont, uiBoldFont;
@@ -823,6 +834,7 @@ namespace EndlessSisyphus
                     anchorBottom: true);
             }
 
+            if (EpigraphVisible) DrawStoneQuote(Epigraph, EpigraphOpacity);
             if (CrankHintVisible) DrawCrankStartHint(w, h, scale);
 
             if (showQuote) DrawStoneQuote(quotes.CurrentText, quotes.Opacity);
@@ -845,6 +857,29 @@ namespace EndlessSisyphus
             float y = anchorBottom ? top + minHeight - height : top;
             OutlinedPassiveLabel(new Rect(centerX - width * 0.5f, y, width, height), text, wrapped,
                 stroke, strokeColor);
+        }
+
+        /// <summary>
+        /// Эпиграф виден только во вступлении забега — пока Сизиф идёт к камню и крутилка
+        /// ещё мертва. К концу вступления он уже погашен, поэтому с подсказкой первого
+        /// действия (<see cref="CrankHintVisible"/>, требует !IntroActive) они не
+        /// пересекаются ни одним кадром.
+        /// </summary>
+        public bool EpigraphVisible =>
+            game != null && game.State == GState.Playing && game.IntroActive &&
+            EpigraphOpacity > 0.001f;
+
+        /// <summary>Появление и уход эпиграфа внутри вступления: проявляется сразу,
+        /// гаснет к моменту, когда игрок берётся за крутилку.</summary>
+        public float EpigraphOpacity
+        {
+            get
+            {
+                if (game == null || game.State != GState.Playing || !game.IntroActive) return 0f;
+                float p = game.IntroProgress;
+                return Mathf.SmoothStep(0f, 1f,
+                    Mathf.Min(Mathf.Clamp01(p / 0.12f), Mathf.Clamp01((1f - p) / 0.18f)));
+            }
         }
 
         /// <summary>
@@ -939,8 +974,8 @@ namespace EndlessSisyphus
         /// и абзац про расход сил) снят целиком: эти объяснения уже есть ПО ХОДУ игры — баннер
         /// препятствия всплывает ровно тогда, когда оно подъезжает (см. BannerText), и работает
         /// лучше предварительного чтения. Нижняя строка органов снята следом — по той же
-        /// причине и по её же слову. Эпиграф про богов снят как погружение: литературный
-        /// слой игры держат цитаты Камю по ходу подъёма и на экране проигрыша.
+        /// причине и по её же слову. Эпиграф про богов со стартового экрана тоже ушёл, но не
+        /// пропал: он переехал во вступление забега (см. <see cref="Epigraph"/>).
         ///
         /// Мраморная плашка вместе с разбором тоже ушла: её текстура 512x256 рассчитана на
         /// блок в несколько строк, под одну строку она растягивается в ленту и крошит

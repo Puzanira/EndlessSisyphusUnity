@@ -7,15 +7,21 @@ using AiGameStudio.ArcadeControls;
 namespace EndlessSisyphus.Tests
 {
     /// <summary>
-    /// Подсказка первого действия (живой плейтест на стойке: «есть момент проигрыша, когда
-    /// делать ничего не надо; после него вывести подсказку — крутить крутилку»).
-    /// Весь проигрыш — падение, скатывание камня, экран проигрыша и вступление
-    /// нового забега — проходит БЕЗ игрока: крутилка в это время мертва (canPush в
-    /// HandleInput). Тесты закрепляют момент появления и момент снятия подсказки:
+    /// Начало забега: эпиграф во вступлении и подсказка первого действия сразу после него.
+    ///
+    /// Подсказка (живой плейтест на стойке: «есть момент проигрыша, когда делать ничего не
+    /// надо; после него вывести подсказку — крутить крутилку»). Весь проигрыш — падение,
+    /// скатывание камня, экран проигрыша и вступление нового забега — проходит БЕЗ игрока:
+    /// крутилка в это время мертва (canPush в HandleInput). Тесты закрепляют момент
+    /// появления и момент снятия подсказки:
     ///  - пока крутилка мертва (вступление) — подсказки нет, она бы врала;
     ///  - как только крутилка ожила — подсказка есть;
     ///  - как только игрок реально крутнул — подсказка уходит;
     ///  - и всё это повторяется после поражения, а не только на первом забеге.
+    ///
+    /// Эпиграф живёт ровно в противофазе: он виден во вступлении, пока Сизиф идёт к камню,
+    /// и обязан погаснуть к моменту, когда загорается подсказка. Тесты стерегут и это —
+    /// два текста в начале забега не должны наложиться ни одним кадром.
     /// </summary>
     public class CrankStartHintTests
     {
@@ -61,18 +67,24 @@ namespace EndlessSisyphus.Tests
 
         IEnumerator EndIntro()
         {
-            // Вступление доигрывается само, без единого касания крутилки.
+            // Вступление доигрывается само, без единого касания крутилки. Заодно каждый
+            // кадр вступления проверяем, что подсказка и эпиграф не горят одновременно.
             float guard = 0f;
             while (game.IntroActive && guard < 12f)
             {
                 guard += Mathf.Min(Time.deltaTime, 0.05f);
                 fake.Next = new BackendSnapshot();
                 PinCalm();
+                AssertNoOverlap();
                 yield return null;
             }
             PinCalm();
             yield return null;
         }
+
+        void AssertNoOverlap() => Assert.IsFalse(ui.EpigraphVisible && ui.CrankHintVisible,
+            "эпиграф и подсказка первого действия живут в начале забега — они не должны " +
+            "оказаться на экране одновременно (IntroProgress " + game.IntroProgress + ")");
 
         [UnityTest]
         public IEnumerator Hint_Hidden_WhileIntroIgnoresTheCrank()
@@ -99,6 +111,8 @@ namespace EndlessSisyphus.Tests
                 "подсказка обязана появиться ровно тогда, когда от игрока снова нужно действие");
             Assert.AreEqual("Крути крутилку, чтобы толкать камень.", GameUI.CrankStartHint,
                 "подсказка называет орган каноническим именем и связывает его с последствием");
+            Assert.IsFalse(ui.EpigraphVisible,
+                "к моменту, когда игрок берётся за крутилку, эпиграф обязан быть погашен");
 
             // Игрок крутит — подсказка обязана уйти.
             float guard = 0f;
@@ -117,6 +131,46 @@ namespace EndlessSisyphus.Tests
             PinCalm();
             yield return null;
             Assert.IsFalse(ui.CrankHintVisible, "после первого толчка подсказка должна уйти");
+        }
+
+        [UnityTest]
+        public IEnumerator Epigraph_BurnsThroughIntro_AndYieldsToTheHint()
+        {
+            Assert.IsFalse(ui.EpigraphVisible,
+                "предусловие: на стартовом экране эпиграфа нет — он снят оттуда и переехал в забег");
+
+            game.StartGame();
+
+            // Дать вступлению разойтись: эпиграф проявляется, а не вспыхивает в первом кадре.
+            float guard = 0f;
+            while (game.IntroActive && game.IntroProgress < 0.5f && guard < 12f)
+            {
+                guard += Mathf.Min(Time.deltaTime, 0.05f);
+                fake.Next = new BackendSnapshot();
+                PinCalm();
+                AssertNoOverlap();
+                yield return null;
+            }
+
+            Assert.IsTrue(game.IntroActive, "предусловие: вступление ещё идёт");
+            Assert.AreEqual(
+                "«Боги приговорили Сизифа вечно вкатывать на вершину горы камень, который, едва достигнув цели, скатывался вниз»",
+                GameUI.Epigraph, "эпиграф — дословный текст основательницы");
+            Assert.IsTrue(ui.EpigraphVisible,
+                "пока Сизиф идёт к камню, эпиграф обязан быть на экране");
+            Assert.Greater(ui.EpigraphOpacity, 0.5f,
+                "в середине вступления эпиграф читается в полную силу, а не еле проступает");
+            Assert.IsFalse(ui.CrankHintVisible,
+                "во вступлении крутилка мертва — подсказки «крути» там нет");
+
+            yield return EndIntro();
+
+            Assert.IsFalse(game.IntroActive, "предусловие: вступление кончилось");
+            Assert.IsFalse(ui.EpigraphVisible,
+                "с концом вступления эпиграф обязан уйти — дальше начинается игра");
+            Assert.AreEqual(0f, ui.EpigraphOpacity, 0.0001f,
+                "погашенный эпиграф не должен подсвечивать каменную плашку остаточной прозрачностью");
+            Assert.IsTrue(ui.CrankHintVisible, "его место занимает подсказка первого действия");
         }
 
         [UnityTest]
