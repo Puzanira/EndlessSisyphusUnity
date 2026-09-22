@@ -21,6 +21,12 @@ namespace EndlessSisyphus.Tests
     /// <see cref="GameUI.LayoutHintPlates"/> с одной геометрией, старые пер-подсказочные
     /// рисовальщики не воскресают, а выросшие плашки не наезжают ни друг на друга, ни на HUD.
     ///
+    /// Золотой рамки у плашек больше нет — её сняла основательница («у текста убрать рамки
+    /// у текста»), и сняла у всех подсказок разом. Единство от этого не ослабло: оформления
+    /// стало на один слой меньше, но слой этот по-прежнему общий и рисуется одним
+    /// PaintHintPlate. Тесты ниже это и держат — плюс отдельная проверка, что рамка не
+    /// возвращается «тихо одной подсказке».
+    ///
     /// Цитаты Камю и эпиграф сюда НЕ входят: у них свой каменный слой (DrawStoneQuote), это
     /// атмосфера, а не подсказка.
     /// </summary>
@@ -98,8 +104,8 @@ namespace EndlessSisyphus.Tests
             return found;
         }
 
-        /// <summary>Та самая геометрия эталона — плашки первого действия: отступы, высота
-        /// строки и рамка считаются из общих формул, а не зашиты в каждую подсказку.</summary>
+        /// <summary>Та самая геометрия эталона — плашки первого действия: отступы и высота
+        /// строки считаются из общих формул, а не зашиты в каждую подсказку.</summary>
         static void AssertPlateGeometry(GameUI.HintPlate plate)
         {
             float padX = GameUI.HintPlatePadX(Scale), padY = GameUI.HintPlatePadY(Scale);
@@ -226,6 +232,29 @@ namespace EndlessSisyphus.Tests
                 "подгонка ширины переехала внутрь общей плашки");
             Assert.IsNotNull(typeof(GameUI).GetMethod("PaintHintPlate", any),
                 "оформление плашки обязано жить в одном месте");
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator PlateChrome_IsBackdropOnly_WithoutAFrame()
+        {
+            const BindingFlags any = BindingFlags.Instance | BindingFlags.Static |
+                                     BindingFlags.Public | BindingFlags.NonPublic;
+
+            // Рамку сняла основательница, и сняла у ВСЕХ подсказок сразу. Вернуть её можно
+            // только так же — всем разом и через PaintHintPlate; отдельной «рамки плашки»
+            // в оформлении больше нет, и её воскрешение обязано быть заметным, а не тихим.
+            Assert.IsNull(typeof(GameUI).GetField("HintPlateFrame", any),
+                "рамка у плашек подсказок снята по решению основательницы — " +
+                "цвет рамки не должен возвращаться в оформление");
+            Assert.IsNull(typeof(GameUI).GetMethod("Frame", any),
+                "рисовальщика рамки в GameUI больше нет: рамку рисовал только он и только " +
+                "у плашек подсказок");
+
+            // А сама подложка на месте: без неё подсказки снова утонут в пейзаже.
+            Assert.Greater(GameUI.HintPlateFill.a, 0.5f,
+                "тёмная подложка под текстом — единственный оставшийся слой оформления, " +
+                "она обязана быть плотной");
             yield return null;
         }
 
