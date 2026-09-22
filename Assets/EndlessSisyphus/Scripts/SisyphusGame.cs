@@ -44,6 +44,16 @@ namespace EndlessSisyphus
         public float LastTapTime, PushAnim;
         public bool SpaceDown, ShiftDown, Careful, CarefulBad;
 
+        /// <summary>
+        /// Забег начат, но игрок ещё ни разу не толкнул камень. Поражение целиком
+        /// (падение → скатывание камня → экран проигрыша → вступление нового забега)
+        /// проходит БЕЗ участия игрока: крутилка всё это время мертва (см. canPush
+        /// в HandleInput). Флаг взводится в StartGame и гаснет на первом толчке —
+        /// по нему GameUI держит подсказку ровно в тот момент, когда от игрока
+        /// СНОВА нужно действие, и убирает её, как только он это действие сделал.
+        /// </summary>
+        public bool AwaitingFirstPush { get; private set; }
+
         public ObKind Obstacle = ObKind.None;
         public ObPhase Phase = ObPhase.Calm;
         public float ObTimer;
@@ -268,6 +278,7 @@ namespace EndlessSisyphus
             audioEngine.WindStop(); audioEngine.RainStop();
             RunId++;
             State = GState.Playing;
+            AwaitingFirstPush = true;
             Height = 0; Momentum = 0; Stamina = GameConfig.StaminaMax;
             LastTapTime = Time.time; PushAnim = 0;
             Careful = false; CarefulBad = false;
@@ -307,6 +318,7 @@ namespace EndlessSisyphus
         public void RegisterTap()
         {
             if (IntroActive) return;
+            AwaitingFirstPush = false;   // игрок сделал действие — подсказку можно убрать
             float now = Time.time, interval = now - LastTapTime; LastTapTime = now; PushAnim = 1;
             if (ShiftDown && !IsOnSteep)
             {

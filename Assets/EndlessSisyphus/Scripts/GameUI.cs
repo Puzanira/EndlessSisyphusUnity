@@ -13,6 +13,9 @@ namespace EndlessSisyphus
 
         const string StartQuote = "«Боги приговорили Сизифа вечно вкатывать на вершину горы камень,\nкоторый, едва достигнув цели, скатывался вниз»";
         const string DefeatQuote = "«Сизиф, бессильный и бунтующий, знает о бесконечности своей печальной участи»";
+        /// <summary>Подсказка первого действия. «Крутилка» — каноничное имя органа стойки,
+        /// направление названо явно: игрок у автомата не знает, куда её крутить.</summary>
+        public const string CrankStartHint = "КРУТИ КРУТИЛКУ ПО ЧАСОВОЙ СТРЕЛКЕ";
 
         Texture2D white, marble, instructionTablet, quoteTablet, authorLogo, buttonNormal, buttonHover, buttonActive;
         Texture2D secondaryButtonNormal, secondaryButtonHover, secondaryButtonActive;
@@ -827,7 +830,47 @@ namespace EndlessSisyphus
                     Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
             }
 
+            if (CrankHintVisible) DrawCrankStartHint(w, h, scale);
+
             if (showQuote) DrawStoneQuote(quotes.CurrentText, quotes.Opacity);
+        }
+
+        /// <summary>
+        /// Видна ли подсказка первого действия. Поражение игрок проходит НИЧЕГО НЕ ДЕЛАЯ:
+        /// падение, скатывание камня, экран проигрыша и вступление нового забега крутилку
+        /// не слушают вовсе. Подсказку показываем ровно в тот кадр, когда крутилка снова
+        /// оживает (вступление кончилось), и снимаем на первом толчке — чтобы игрок у
+        /// стойки не гадал, ждёт от него игра чего-то или нет. Баннер препятствия имеет
+        /// приоритет: он занимает ту же роль «что делать сейчас» и сам зовёт крутить.
+        /// </summary>
+        public bool CrankHintVisible =>
+            game != null && game.State == GState.Playing && !game.IntroActive &&
+            game.AwaitingFirstPush && BannerText() == null;
+
+        void DrawCrankStartHint(float w, float h, float scale)
+        {
+            var style = PassiveText(new GUIStyle(hint)
+            {
+                font = uiBoldFont,
+                fontStyle = FontStyle.Normal,
+                fontSize = Mathf.Max(20, Mathf.RoundToInt(30f * scale)),
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = false,
+                normal = { textColor = new Color(1f, 0.8f, 0.2f) }
+            });
+            float tracking = 1.8f * scale;
+            float textWidth = TrackedTextWidth(CrankStartHint, style, tracking);
+            float padX = 30f * scale, padY = 16f * scale;
+            float lineHeight = style.fontSize * 1.45f;
+            var box = new Rect(w * 0.5f - textWidth * 0.5f - padX,
+                Mathf.Max(150f * scale, h * 0.26f),
+                textWidth + padX * 2f, lineHeight + padY * 2f);
+
+            Rect2(box, new Color(0.035f, 0.03f, 0.07f, 0.78f));
+            Frame(box, Mathf.Max(1f, scale), new Color(0.91f, 0.81f, 0.48f, 0.9f));
+            TrackedOutlinedLabel(new Rect(box.x + padX, box.y + padY, textWidth, lineHeight),
+                CrankStartHint, style, tracking, Mathf.Max(0.5f, 0.4f * scale),
+                new Color(0.035f, 0.03f, 0.07f, 0.96f));
         }
 
         string BannerText()
