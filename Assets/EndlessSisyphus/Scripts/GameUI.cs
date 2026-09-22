@@ -158,17 +158,6 @@ namespace EndlessSisyphus
         static void PassiveLabel(Rect rect, string text, GUIStyle style) =>
             GUI.Label(rect, text, PassiveText(style));
 
-        static void OutlinedPassiveLabel(Rect rect, string text, GUIStyle style, float stroke, Color strokeColor)
-        {
-            var outlineStyle = PassiveText(new GUIStyle(style));
-            outlineStyle.normal.textColor = strokeColor;
-            GUI.Label(new Rect(rect.x - stroke, rect.y, rect.width, rect.height), text, outlineStyle);
-            GUI.Label(new Rect(rect.x + stroke, rect.y, rect.width, rect.height), text, outlineStyle);
-            GUI.Label(new Rect(rect.x, rect.y - stroke, rect.width, rect.height), text, outlineStyle);
-            GUI.Label(new Rect(rect.x, rect.y + stroke, rect.width, rect.height), text, outlineStyle);
-            PassiveLabel(rect, text, style);
-        }
-
         void Rect2(Rect r, Color c) { var o = GUI.color; GUI.color = c; GUI.DrawTexture(r, white); GUI.color = o; }
 
         static bool IsRightAligned(TextAnchor alignment) =>
@@ -784,53 +773,13 @@ namespace EndlessSisyphus
             var right2 = new GUIStyle(hint) { font = uiFont, fontSize = Mathf.RoundToInt(18f * scale), alignment = TextAnchor.UpperRight, normal = { textColor = new Color(0.72f, 0.69f, 0.62f) } };
             TrackedLabel(new Rect(w - 430f * scale, 62f * scale, 410f * scale, 30f * scale), "РЕКОРД  " + Roman.To(game.Best), right2, 1.5f * scale);
 
-            // баннер препятствия
-            var hudBanner = new GUIStyle(hint)
-            {
-                font = uiBoldFont,
-                fontStyle = FontStyle.Normal,
-                fontSize = Mathf.RoundToInt(20f * scale),
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = new Color(1f, 0.95f, 0.82f) }
-            };
-            string bt = BannerText();
-            if (bt != null)
-                // Ширина считается по самой строке, а не фиксируется числом: подсказки
-                // основательницы — цельные предложения («Пошёл дождь. Включи защиту от
-                // дождя: нажми 1 раз красную кнопку и продолжай крутить.»), и любая
-                // зашитая рамка рано или поздно режет очередную формулировку по краю.
-                // Не влезло в строку — переносим на вторую, а не обрезаем.
-                DrawFittedBanner(bt, hudBanner, w / 2f, 88f * scale, w * 0.92f, 42f * scale,
-                    Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
-
-            // индикатор состояния защитного режима: игрок ОБЯЗАН видеть, включился ли режим,
-            // поэтому явный контурный бейдж защиты в стиле баннера препятствий, а не тихая
-            // подпись (живой фидбек: «нажимаю красную — не понимаю, включилось ли»).
-            //
-            // Зеркального бейджа «защита ВЫКЛ» здесь больше нет. Он загорался по условию
-            // «дождь идёт, а защита не включена» — то есть ровно тогда, когда наверху уже
-            // висит баннер «Пошёл дождь. Включи защиту от дождя…», и дублировал его слово
-            // в слово («уже вроде не надо» — основательница). Единственное окно, где он
-            // оставался бы один, — доли секунды затухания IRain ПОСЛЕ конца дождя, когда
-            // баннер уже снят: там звать включать защиту поздно и попросту неверно.
-            if (game.Careful)
-            {
-                bool exitGrace = game.RainExitGrace > 0f;
-                var cs = new GUIStyle(hudBanner)
-                {
-                    normal = { textColor = RainGuardColor(game.CarefulBad || exitGrace) }
-                };
-                string ct = game.CarefulBad
-                    ? "Дождя нет. Отключи защиту от дождя: нажми красную кнопку."
-                    : exitGrace ? "Дождь прошёл. Отключи защиту от дождя: нажми красную кнопку." : "ЗАЩИТА ОТ ДОЖДЯ — ВКЛ";
-                float carefulY = showQuote ? quoteArea.y - 38f * scale : h - 60f * scale;
-                DrawFittedBanner(ct, cs, w / 2f, carefulY, w * 0.92f, 34f * scale,
-                    Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f),
-                    anchorBottom: true);
-            }
+            // Все подсказки геймплея раскладываются одним помощником и рисуются одной
+            // плашкой — см. LayoutHintPlates/PaintHintPlate.
+            var plates = LayoutHintPlates(w, h, scale, MeasureHintLine,
+                showQuote ? quoteArea.y : h);
+            for (int i = 0; i < plates.Count; i++) PaintHintPlate(plates[i], scale);
 
             if (EpigraphVisible) DrawStoneQuote(Epigraph, EpigraphOpacity);
-            if (CrankHintVisible) DrawCrankStartHint(w, h, scale);
 
             if (showQuote) DrawStoneQuote(quotes.CurrentText, quotes.Opacity);
         }
@@ -858,23 +807,221 @@ namespace EndlessSisyphus
             ? new Color(1f, 0.8f, 0.2f)          // золото игры: заголовок, рекорд, подсказка крутилки
             : new Color(0.49f, 0.94f, 0.82f);    // бирюза: всё правильно, действия не нужно
 
-        /// <summary>
-        /// Баннер-подсказка по центру: ширина подгоняется под текст, при нехватке экрана
-        /// строка переносится (а не обрезается клиппингом, как было бы у жёсткой рамки).
-        /// <paramref name="anchorBottom"/> — для бейджа защиты, который прижат к низу
-        /// экрана: выросшая на вторую строку подсказка обязана уехать вверх, а не за край.
-        /// </summary>
-        void DrawFittedBanner(string text, GUIStyle style, float centerX, float top,
-            float maxWidth, float minHeight, float stroke, Color strokeColor, bool anchorBottom = false)
+        // ─── Единая плашка подсказки геймплея ──────────────────────────────────────────
+        //
+        // Решение основательницы у живого автомата: «все подсказки к геймплею надо сделать
+        // на одинаковых плашках». До этого подсказок было три вида и выглядели они по-разному:
+        // подсказка первого действия шла золотом по тёмной плашке с золотой рамкой (на кадрах
+        // читалась лучше всех), а баннеры препятствий и бейдж защиты — тонкой обведённой
+        // строкой прямо по пейзажу, где их съедали скала, дождь и облака. За эталон взята
+        // плашка первого действия; к ней приведены остальные. Геометрия, рамка, непрозрачность
+        // фона, отступы и трекинг теперь общие — отличается только кегль и цвет текста.
+        //
+        // Ранний вариант «подложки» основательница забраковала, но браковала она КРАСНЫЙ цвет
+        // бейджа (перекрашен в золото, см. RainGuardColor), а не саму плашку: живьём она
+        // просит ровно обратное — единый вид.
+
+        /// <summary>Заливка плашки: тот же ночной тон, что у плашки первого действия.</summary>
+        public static readonly Color HintPlateFill = new Color(0.035f, 0.03f, 0.07f, 0.78f);
+        /// <summary>Рамка плашки: золото стойки.</summary>
+        public static readonly Color HintPlateFrame = new Color(0.91f, 0.81f, 0.48f, 0.9f);
+        /// <summary>Обводка текста: тот же тон, что заливка, но плотнее — отрывает глиф от фона.</summary>
+        public static readonly Color HintPlateStroke = new Color(0.035f, 0.03f, 0.07f, 0.96f);
+        /// <summary>Цвет баннера препятствия. Тёплый light-cream: на тёмной плашке читается
+        /// не хуже золота, но остаётся узнаваемо «не золотым» — золото в игре занято
+        /// значением «от тебя нужно действие с органом стойки».</summary>
+        public static readonly Color HintPlateBannerText = new Color(1f, 0.95f, 0.82f);
+        /// <summary>Цвет подсказки первого действия — золото игры.</summary>
+        public static readonly Color HintPlateCrankText = new Color(1f, 0.8f, 0.2f);
+
+        public static float HintPlatePadX(float scale) => 30f * scale;
+        public static float HintPlatePadY(float scale) => 16f * scale;
+        public static float HintPlateLineHeight(int fontSize) => fontSize * 1.45f;
+        /// <summary>Трекинг привязан к кеглю, а не к масштабу экрана: у плашки первого
+        /// действия он исторически 1.8*scale при кегле 30*scale — ровно 6 % кегля. Так
+        /// плашки с разным кеглем всё равно читаются одним набором.</summary>
+        public static float HintPlateTracking(int fontSize) => fontSize * 0.06f;
+
+        /// <summary>Одна выложенная плашка подсказки: коробка, строки и цвет текста.</summary>
+        public readonly struct HintPlate
         {
-            var content = new GUIContent(text);
-            var flat = new GUIStyle(style) { wordWrap = false };
-            var wrapped = new GUIStyle(style) { wordWrap = true };
-            float width = Mathf.Min(flat.CalcSize(content).x + 6f, maxWidth);
-            float height = Mathf.Max(minHeight, wrapped.CalcHeight(content, width));
-            float y = anchorBottom ? top + minHeight - height : top;
-            OutlinedPassiveLabel(new Rect(centerX - width * 0.5f, y, width, height), text, wrapped,
-                stroke, strokeColor);
+            public readonly string Id;
+            public readonly string Text;
+            public readonly string[] Lines;
+            public readonly Color TextColor;
+            public readonly int FontSize;
+            public readonly Rect Box;
+
+            public HintPlate(string id, string text, string[] lines, Color textColor, int fontSize, Rect box)
+            {
+                Id = id; Text = text; Lines = lines; TextColor = textColor; FontSize = fontSize; Box = box;
+            }
+        }
+
+        /// <summary>
+        /// Раскладка ВСЕХ подсказок геймплея, которые сейчас на экране: баннер препятствия,
+        /// подсказка первого действия и бейдж защиты от дождя. Один список — одна геометрия:
+        /// развести их по разным помощникам больше нельзя, не сломав тест
+        /// <c>HintPlatesTests</c>.
+        ///
+        /// Замер текста вынесен в делегат <paramref name="measure"/> (строка + кегль → ширина
+        /// с трекингом): рисовать умеет только OnGUI, а проверять раскладку надо и без него.
+        ///
+        /// <paramref name="quoteTop">верх каменной плашки цитаты (или высота экрана, если
+        /// цитаты нет) — бейдж защиты прижимается к нему снизу, чтобы не наехать на цитату.</paramref>
+        /// </summary>
+        public System.Collections.Generic.List<HintPlate> LayoutHintPlates(
+            float w, float h, float scale, System.Func<string, int, float> measure, float quoteTop)
+        {
+            var plates = new System.Collections.Generic.List<HintPlate>(3);
+            float maxWidth = w * 0.92f;
+
+            // Баннер препятствия — у верхнего края, под шкалой СИЛ и счётчиками.
+            // Подсказки основательницы — цельные предложения («Пошёл ливень. Включи защиту
+            // от дождя: нажми 1 раз красную кнопку и продолжай крутить.»), и плашка обязана
+            // расти под строку: не влезло — переносим на вторую, а не режем по краю.
+            string bannerText = game != null ? BannerText() : null;
+            if (bannerText != null)
+                plates.Add(MakeHintPlate("banner", bannerText, HintPlateBannerText,
+                    HintFontSize(24f, scale), scale, w * 0.5f, HintBannerTop(scale), false, maxWidth, measure));
+
+            // Подсказка первого действия. С баннером препятствия она не пересекается по
+            // построению (CrankHintVisible требует BannerText() == null), но с бейджем
+            // защиты — вполне, поэтому живёт в верхней трети, а бейдж у низа.
+            if (CrankHintVisible)
+                plates.Add(MakeHintPlate("crank", CrankStartHint, HintPlateCrankText,
+                    HintFontSize(30f, scale), scale, w * 0.5f, Mathf.Max(150f * scale, h * 0.26f),
+                    false, maxWidth, measure));
+
+            // Бейдж защиты от дождя: игрок ОБЯЗАН видеть, включился ли режим (живой фидбек:
+            // «нажимаю красную — не понимаю, включилось ли»). Прижат к низу, а при живой
+            // цитате Камю — к её верхней кромке.
+            //
+            // Зеркального бейджа «защита ВЫКЛ» здесь больше нет. Он загорался по условию
+            // «дождь идёт, а защита не включена» — то есть ровно тогда, когда наверху уже
+            // висит баннер «Пошёл дождь. Включи защиту от дождя…», и дублировал его слово
+            // в слово («уже вроде не надо» — основательница).
+            if (game != null && game.Careful)
+            {
+                bool exitGrace = game.RainExitGrace > 0f;
+                string guardText = game.CarefulBad
+                    ? "Дождя нет. Отключи защиту от дождя: нажми красную кнопку."
+                    : exitGrace ? "Дождь прошёл. Отключи защиту от дождя: нажми красную кнопку."
+                                : "ЗАЩИТА ОТ ДОЖДЯ — ВКЛ";
+                float bottom = quoteTop < h ? quoteTop - 20f * scale : h - 26f * scale;
+                plates.Add(MakeHintPlate("guard", guardText, RainGuardColor(game.CarefulBad || exitGrace),
+                    HintFontSize(24f, scale), scale, w * 0.5f, bottom, true, maxWidth, measure));
+            }
+
+            return plates;
+        }
+
+        static int HintFontSize(float baseSize, float scale) =>
+            Mathf.Max(18, Mathf.RoundToInt(baseSize * scale));
+
+        /// <summary>Верхняя кромка баннера препятствия. Ниже строки «РЕКОРД …» справа
+        /// (62*scale + 30*scale) и шкалы СИЛ слева — плашка стала выше тонкой строки,
+        /// и запас нужен реальный.</summary>
+        public static float HintBannerTop(float scale) => 110f * scale;
+
+        /// <summary>Зоны HUD, куда плашкам подсказок заезжать нельзя: шкала СИЛ слева
+        /// и счётчики высоты/рекорда справа.</summary>
+        public static Rect[] HudReservedZones(float w, float scale) => new[]
+        {
+            new Rect(26f * scale, 13f * scale, Mathf.Min(w * 0.34f, 400f * scale), 47f * scale),
+            new Rect(w - 430f * scale, 12f * scale, 410f * scale, 80f * scale)
+        };
+
+        static HintPlate MakeHintPlate(string id, string text, Color textColor, int fontSize, float scale,
+            float centerX, float edgeY, bool anchorBottom, float maxWidth,
+            System.Func<string, int, float> measure)
+        {
+            float padX = HintPlatePadX(scale), padY = HintPlatePadY(scale);
+            string[] lines = WrapHintText(text, fontSize, maxWidth - padX * 2f, measure);
+
+            float textWidth = 0f;
+            for (int i = 0; i < lines.Length; i++) textWidth = Mathf.Max(textWidth, measure(lines[i], fontSize));
+
+            float boxW = Mathf.Min(textWidth + padX * 2f, maxWidth);
+            float boxH = lines.Length * HintPlateLineHeight(fontSize) + padY * 2f;
+            float y = anchorBottom ? edgeY - boxH : edgeY;
+            return new HintPlate(id, text, lines, textColor, fontSize,
+                new Rect(centerX - boxW * 0.5f, y, boxW, boxH));
+        }
+
+        /// <summary>
+        /// Перенос строки по словам под ширину плашки. Жадный проход даёт первую строку почти
+        /// во всю ширину и куцый хвост, поэтому найденное число строк потом «утрамбовывается»
+        /// более узким лимитом — так две строки выходят примерно равной длины.
+        /// </summary>
+        static string[] WrapHintText(string text, int fontSize, float maxTextWidth,
+            System.Func<string, int, float> measure)
+        {
+            float full = measure(text, fontSize);
+            if (full <= maxTextWidth || maxTextWidth <= 0f) return new[] { text };
+
+            string[] greedy = GreedyWrap(text, fontSize, maxTextWidth, measure);
+            if (greedy.Length < 2) return greedy;
+
+            float ideal = full / greedy.Length;
+            for (float limit = ideal; limit < maxTextWidth; limit += (maxTextWidth - ideal) * 0.1f + 1f)
+            {
+                string[] balanced = GreedyWrap(text, fontSize, limit, measure);
+                if (balanced.Length <= greedy.Length) return balanced;
+            }
+            return greedy;
+        }
+
+        static string[] GreedyWrap(string text, int fontSize, float limit,
+            System.Func<string, int, float> measure)
+        {
+            string[] words = text.Split(' ');
+            var lines = new System.Collections.Generic.List<string>();
+            string current = string.Empty;
+            for (int i = 0; i < words.Length; i++)
+            {
+                string candidate = current.Length == 0 ? words[i] : current + " " + words[i];
+                if (current.Length > 0 && measure(candidate, fontSize) > limit)
+                {
+                    lines.Add(current);
+                    current = words[i];
+                }
+                else current = candidate;
+            }
+            if (current.Length > 0) lines.Add(current);
+            return lines.Count == 0 ? new[] { text } : lines.ToArray();
+        }
+
+        /// <summary>Замер строки ровно тем шрифтом и трекингом, которыми её и нарисуют.</summary>
+        float MeasureHintLine(string text, int fontSize) =>
+            TrackedTextWidth(text, HintTextStyle(fontSize, Color.white), HintPlateTracking(fontSize));
+
+        GUIStyle HintTextStyle(int fontSize, Color color) => PassiveText(new GUIStyle(hint)
+        {
+            font = uiBoldFont,
+            fontStyle = FontStyle.Normal,
+            fontSize = fontSize,
+            alignment = TextAnchor.MiddleCenter,
+            wordWrap = false,
+            normal = { textColor = color }
+        });
+
+        /// <summary>Единственное место, где рисуется оформление плашки подсказки.</summary>
+        void PaintHintPlate(HintPlate plate, float scale)
+        {
+            Rect2(plate.Box, HintPlateFill);
+            Frame(plate.Box, Mathf.Max(1f, scale), HintPlateFrame);
+
+            var style = HintTextStyle(plate.FontSize, plate.TextColor);
+            float tracking = HintPlateTracking(plate.FontSize);
+            float lineHeight = HintPlateLineHeight(plate.FontSize);
+            float padX = HintPlatePadX(scale), padY = HintPlatePadY(scale);
+            float stroke = Mathf.Max(0.5f, 0.4f * scale);
+            for (int i = 0; i < plate.Lines.Length; i++)
+                TrackedOutlinedLabel(
+                    new Rect(plate.Box.x + padX, plate.Box.y + padY + i * lineHeight,
+                        plate.Box.width - padX * 2f, lineHeight),
+                    plate.Lines[i], style, tracking, stroke, HintPlateStroke);
         }
 
         /// <summary>
@@ -911,32 +1058,6 @@ namespace EndlessSisyphus
         public bool CrankHintVisible =>
             game != null && game.State == GState.Playing && !game.IntroActive &&
             game.AwaitingFirstPush && BannerText() == null;
-
-        void DrawCrankStartHint(float w, float h, float scale)
-        {
-            var style = PassiveText(new GUIStyle(hint)
-            {
-                font = uiBoldFont,
-                fontStyle = FontStyle.Normal,
-                fontSize = Mathf.Max(20, Mathf.RoundToInt(30f * scale)),
-                alignment = TextAnchor.MiddleCenter,
-                wordWrap = false,
-                normal = { textColor = new Color(1f, 0.8f, 0.2f) }
-            });
-            float tracking = 1.8f * scale;
-            float textWidth = TrackedTextWidth(CrankStartHint, style, tracking);
-            float padX = 30f * scale, padY = 16f * scale;
-            float lineHeight = style.fontSize * 1.45f;
-            var box = new Rect(w * 0.5f - textWidth * 0.5f - padX,
-                Mathf.Max(150f * scale, h * 0.26f),
-                textWidth + padX * 2f, lineHeight + padY * 2f);
-
-            Rect2(box, new Color(0.035f, 0.03f, 0.07f, 0.78f));
-            Frame(box, Mathf.Max(1f, scale), new Color(0.91f, 0.81f, 0.48f, 0.9f));
-            TrackedOutlinedLabel(new Rect(box.x + padX, box.y + padY, textWidth, lineHeight),
-                CrankStartHint, style, tracking, Mathf.Max(0.5f, 0.4f * scale),
-                new Color(0.035f, 0.03f, 0.07f, 0.96f));
-        }
 
         /// <summary>
         /// Баннер «что делать сейчас». Органы здесь названы словами единого словаря стойки
