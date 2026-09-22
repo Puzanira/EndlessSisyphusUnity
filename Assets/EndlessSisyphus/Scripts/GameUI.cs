@@ -782,7 +782,10 @@ namespace EndlessSisyphus
             };
             string bt = BannerText();
             if (bt != null)
-                OutlinedPassiveLabel(new Rect(w / 2f - 230f * scale, 88f * scale, 460f * scale, 42f * scale),
+                // Рамка баннера шире авторской (было 460): органы теперь названы словами
+                // единого словаря («ЖЁЛТАЯ КНОПКА», «КРАСНАЯ КНОПКА»), строки подросли —
+                // в 460 самая длинная («ЛИВЕНЬ — КРАСНАЯ КНОПКА ОДИН РАЗ + КРУТИ») не влезала.
+                OutlinedPassiveLabel(new Rect(w / 2f - 330f * scale, 88f * scale, 660f * scale, 42f * scale),
                     bt, hudBanner, Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
 
             // индикатор состояния защитного режима: игрок ОБЯЗАН видеть, включился ли режим,
@@ -802,10 +805,10 @@ namespace EndlessSisyphus
                     }
                 };
                 string ct = game.CarefulBad
-                    ? "ЗАЩИТА ВКЛ БЕЗ ДОЖДЯ — ОТКЛЮЧИ КРАСНУЮ"
-                    : exitGrace ? "ДОЖДЬ ПРОШЁЛ — ЗАЩИТА ВКЛ, ОТКЛЮЧИ КРАСНУЮ" : "ЗАЩИТА ОТ ДОЖДЯ — ВКЛ";
+                    ? "ЗАЩИТА ВКЛ БЕЗ ДОЖДЯ — ОТКЛЮЧИ КРАСНУЮ КНОПКУ"
+                    : exitGrace ? "ДОЖДЬ ПРОШЁЛ — ЗАЩИТА ВКЛ, ОТКЛЮЧИ КРАСНУЮ КНОПКУ" : "ЗАЩИТА ОТ ДОЖДЯ — ВКЛ";
                 float carefulY = showQuote ? quoteArea.y - 38f * scale : h - 60f * scale;
-                OutlinedPassiveLabel(new Rect(w / 2f - 320f * scale, carefulY, 640f * scale, 34f * scale),
+                OutlinedPassiveLabel(new Rect(w / 2f - 380f * scale, carefulY, 760f * scale, 34f * scale),
                     ct, cs, Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
             }
             else if (rainNow)
@@ -816,8 +819,8 @@ namespace EndlessSisyphus
                     { normal = { textColor = new Color(0.84f, 0.29f, 0.23f) } };
                 float carefulY = showQuote ? quoteArea.y - 38f * scale : h - 60f * scale;
                 // «ОДИН РАЗ (НЕ ДЕРЖИ)» — красная это ТОГГЛ: игроки её зажимают и ждут эффекта.
-                OutlinedPassiveLabel(new Rect(w / 2f - 320f * scale, carefulY, 640f * scale, 34f * scale),
-                    "ЗАЩИТА ВЫКЛ — НАЖМИ КРАСНУЮ ОДИН РАЗ (НЕ ДЕРЖИ)", offStyle,
+                OutlinedPassiveLabel(new Rect(w / 2f - 380f * scale, carefulY, 760f * scale, 34f * scale),
+                    "ЗАЩИТА ВЫКЛ — НАЖМИ КРАСНУЮ КНОПКУ ОДИН РАЗ (НЕ ДЕРЖИ)", offStyle,
                     Mathf.Max(0.45f, 0.35f * scale), new Color(0.035f, 0.03f, 0.07f, 0.96f));
             }
 
@@ -864,6 +867,19 @@ namespace EndlessSisyphus
                 new Color(0.035f, 0.03f, 0.07f, 0.96f));
         }
 
+        /// <summary>
+        /// Баннер «что делать сейчас». Органы здесь названы словами единого словаря стойки
+        /// (крутилка · жёлтая кнопка · зелёная кнопка · красная кнопка · кнопка меню) —
+        /// ровно так они подписаны на самой стойке физически.
+        ///
+        /// Крутилка — сознательное исключение: в баннерах она остаётся ГЛАГОЛОМ («КРУТИ»,
+        /// «НЕ КРУТИ»). Имя органа игрок получает раньше и дважды — строкой «КРУТИЛКА —
+        /// толкать» на стартовом экране и подсказкой первого действия
+        /// <see cref="CrankStartHint"/>, которая загорается в начале КАЖДОГО забега и висит
+        /// до первого толчка. К моменту первого препятствия «крути» уже однозначно. Вписать
+        /// «КРУТИЛКУ» в каждый баннер значит повторять имя пятый раз в строке, которую
+        /// читают на ходу за долю секунды.
+        /// </summary>
         string BannerText()
         {
             if (game.WindExitGrace > 0f)
@@ -875,12 +891,14 @@ namespace EndlessSisyphus
                     return (game.WindVariant == 0 ? "ВЕТЕР" : game.WindVariant == 1 ? "ПОРЫВЫ" : "ТУРБУЛЕНТНЫЙ ВЕТЕР") +
                         " — НЕ КРУТИ";
                 case ObKind.Rain:
-                    // «ОДИН РАЗ» прямо в баннере: живой фидбек — игроки ЗАЖИМАЮТ красную,
+                    // «ОДИН РАЗ» прямо в баннере: живой фидбек — игроки ЗАЖИМАЮТ красную кнопку,
                     // хотя это тоггл и достаточно короткого нажатия.
                     return (game.RainVariant == 0 ? "МОРОСЬ" : game.RainVariant == 1 ? "ДОЖДЬ" : "ЛИВЕНЬ") +
-                        " — КРАСНАЯ ОДИН РАЗ + КРУТИ";
+                        " — КРАСНАЯ КНОПКА ОДИН РАЗ + КРУТИ";
                 case ObKind.Ice: return game.ActiveIceDistance <= game.VW * 0.28f ? "ЛЁД — КРУТИ РОВНО" : null;
-                case ObKind.Steep: return game.ActiveSteepDistance <= game.VW * 0.30f ? "КРУТОЙ СКЛОН — ! + КРУТИ" : null;
+                // «!» был голым значком: на стойке этот орган подписан «ЖЁЛТАЯ КНОПКА»,
+                // и связи между значком на экране и кнопкой под рукой игрок не видел.
+                case ObKind.Steep: return game.ActiveSteepDistance <= game.VW * 0.30f ? "КРУТОЙ СКЛОН — ЖЁЛТАЯ КНОПКА + КРУТИ" : null;
                 default: return null;
             }
         }
@@ -949,12 +967,12 @@ namespace EndlessSisyphus
                 fontSize = Mathf.Max(17, Mathf.RoundToInt(19f * scale)),
                 fontStyle = FontStyle.Normal
             };
-            if (GUI.Button(new Rect(buttonX, top + 160f * scale, buttonW, 50f * scale), "ЗЕЛЁНАЯ — НАЧАТЬ", startButton)) game.StartGame();
+            if (GUI.Button(new Rect(buttonX, top + 160f * scale, buttonW, 50f * scale), "ЗЕЛЁНАЯ КНОПКА — НАЧАТЬ", startButton)) game.StartGame();
 
             // Кнопки настроек на автомате нет: мыши у стойки нет, сложность берётся дефолтная
             // (DifficultySettings.Load) — экран настроек остаётся в коде, но входа в него с экранов нет.
             PassiveLabel(new Rect(x, top + 226f * scale, contentW, 30f * scale),
-                "КРУТИЛКА — толкать     ЗЕЛЁНАЯ — начать     MENU — выход", startHint);
+                "КРУТИЛКА — толкать     ЗЕЛЁНАЯ КНОПКА — начать     КНОПКА МЕНЮ — выход", startHint);
 
             float authorMargin = 24f * scale;
             float logoSize = 44f * scale;
@@ -1094,10 +1112,10 @@ namespace EndlessSisyphus
             DrawStoneQuoteAt(defeatQuoteRect, DefeatQuote, 1f);
 
             float actionsY = defeatQuoteRect.yMax + 18f * scale;
-            if (GUI.Button(new Rect(x, actionsY, width, 52f * scale), "ЗЕЛЁНАЯ — ЗАНОВО", btn)) game.StartGame();
+            if (GUI.Button(new Rect(x, actionsY, width, 52f * scale), "ЗЕЛЁНАЯ КНОПКА — ЗАНОВО", btn)) game.StartGame();
             // Вторичной кнопки «В МЕНЮ» на автомате нет: указателя у стойки нет, а выход
-            // с экрана — физическая MENU (контракт автомата), она же возвращает в лаунчер.
-            PassiveLabel(new Rect(x, actionsY + 62f * scale, width, 30f * scale), "MENU — выход", overRecord);
+            // с экрана — физическая кнопка меню (контракт автомата), она же возвращает в лаунчер.
+            PassiveLabel(new Rect(x, actionsY + 62f * scale, width, 30f * scale), "КНОПКА МЕНЮ — выход", overRecord);
         }
     }
 }
