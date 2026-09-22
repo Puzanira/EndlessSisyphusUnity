@@ -11,7 +11,6 @@ namespace EndlessSisyphus
         public SisyphusGame game;
         public QuoteDirector quotes;
 
-        const string StartQuote = "«Боги приговорили Сизифа вечно вкатывать на вершину горы камень,\nкоторый, едва достигнув цели, скатывался вниз»";
         const string DefeatQuote = "«Сизиф, бессильный и бунтующий, знает о бесконечности своей печальной участи»";
         /// <summary>Подсказка первого действия. «Крутилка» — каноничное имя органа стойки,
         /// направление названо явно: игрок у автомата не знает, куда её крутить.</summary>
@@ -264,34 +263,6 @@ namespace EndlessSisyphus
             for (int i = 0; i < text.Length; i++)
                 width += style.CalcSize(new GUIContent(text[i].ToString())).x;
             return width + Mathf.Max(0, text.Length - 1) * tracking;
-        }
-
-        void DrawNarrativeLine(Rect rect, GUIStyle regularStyle, GUIStyle keyStyle,
-            float keyWeight, string firstKey, string middle, string secondKey = null, string suffix = null)
-        {
-            var regular = PassiveText(new GUIStyle(regularStyle) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
-            var key = PassiveText(new GUIStyle(keyStyle) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
-            float firstWidth = key.CalcSize(new GUIContent(firstKey)).x;
-            float middleWidth = regular.CalcSize(new GUIContent(middle)).x;
-            float secondWidth = string.IsNullOrEmpty(secondKey) ? 0f : key.CalcSize(new GUIContent(secondKey)).x;
-            float suffixWidth = string.IsNullOrEmpty(suffix) ? 0f : regular.CalcSize(new GUIContent(suffix)).x;
-            float segmentGap = Mathf.Max(3f, regular.CalcSize(new GUIContent(" ")).x);
-            float x = rect.x;
-
-            OutlinedPassiveLabel(new Rect(x, rect.y, firstWidth, rect.height), firstKey, key,
-                keyWeight, key.normal.textColor);
-            x += firstWidth + segmentGap;
-            PassiveLabel(new Rect(x, rect.y, middleWidth, rect.height), middle, regular);
-            x += middleWidth;
-            if (!string.IsNullOrEmpty(secondKey))
-            {
-                x += segmentGap;
-                OutlinedPassiveLabel(new Rect(x, rect.y, secondWidth, rect.height), secondKey, key,
-                    keyWeight, key.normal.textColor);
-                x += secondWidth;
-            }
-            if (!string.IsNullOrEmpty(suffix))
-                PassiveLabel(new Rect(x, rect.y, suffixWidth, rect.height), suffix, regular);
         }
 
         void DrawMetric(Rect rect, string label, string value, GUIStyle labelStyle, GUIStyle valueStyle,
@@ -717,16 +688,6 @@ namespace EndlessSisyphus
             GUI.color = old;
         }
 
-        void DrawInstructionTablet(Rect r, float scale)
-        {
-            var old = GUI.color;
-            GUI.color = new Color(0.025f, 0.022f, 0.035f, 0.40f);
-            GUI.DrawTexture(new Rect(r.x + 7f * scale, r.y + 10f * scale, r.width, r.height), instructionTablet, ScaleMode.StretchToFill, true);
-            GUI.color = Color.white;
-            GUI.DrawTexture(r, instructionTablet, ScaleMode.StretchToFill, true);
-            GUI.color = old;
-        }
-
         Rect QuoteRect(string text, float alpha)
         {
             float scale = UiScale;
@@ -926,68 +887,46 @@ namespace EndlessSisyphus
 
         Rect Center(float cw, float ch) => new Rect(Screen.width / 2 - cw / 2, Screen.height / 2 - ch / 2, cw, ch);
 
+        /// <summary>
+        /// Стартовый экран стойки. Решение основательницы после плейтеста: экран должен
+        /// читаться за пару секунд, а не читаться вовсе («слишком он большой, его никто не
+        /// читает»). Поэтому здесь ТОЛЬКО то, без чего игрок не начнёт: суть (толкать камень
+        /// вверх), чем играть (крутилка), чем начать (зелёная кнопка), чем выйти (кнопка меню).
+        ///
+        /// Разбор препятствий (плашка «КАК ПРЕОДОЛЕВАТЬ ПРЕПЯТСТВИЯ», строки лёд/склон/дождь/ветер
+        /// и абзац про расход сил) снят целиком: эти объяснения уже есть ПО ХОДУ игры — баннер
+        /// препятствия всплывает ровно тогда, когда оно подъезжает (см. BannerText), и работает
+        /// лучше предварительного чтения. Эпиграф про богов снят как погружение: литературный
+        /// слой игры держат цитаты Камю по ходу подъёма и на экране проигрыша.
+        ///
+        /// Мраморная плашка вместе с разбором тоже ушла: её текстура 512x256 рассчитана на
+        /// блок в несколько строк, под одну строку она растягивается в ленту и крошит
+        /// сколотые углы. Оставшаяся строка идёт светлым текстом по затемнению.
+        /// </summary>
         void DrawStart()
         {
             Rect2(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.03f, 0.07f, 0.82f));
             float scale = UiScale;
             float contentW = Mathf.Min(Screen.width * 0.72f, 900f * scale);
             float x = (Screen.width - contentW) * 0.5f;
-            float top = Mathf.Max(28f * scale, Screen.height * 0.075f);
+            // Блок стал коротким — кладём его по центру экрана (с лёгким подъёмом вверх),
+            // иначе после выноса плашки он висит в верхней трети над пустотой.
+            const float blockH = 256f;
+            float top = Mathf.Max(28f * scale, (Screen.height - blockH * scale) * 0.5f - 40f * scale);
 
             var startTitle = new GUIStyle(title) { fontSize = Mathf.Max(34, Mathf.RoundToInt(44f * scale)) };
-            var epigraph = PassiveText(new GUIStyle(quote)
+            // Суть игры — единственная оставшаяся строка «про что это».
+            var pitch = PassiveText(new GUIStyle(body)
             {
                 font = uiFont,
-                fontSize = Mathf.Max(14, Mathf.RoundToInt(18f * scale)),
+                fontSize = Mathf.Max(15, Mathf.RoundToInt(20f * scale)),
                 fontStyle = FontStyle.Normal,
                 alignment = TextAnchor.MiddleCenter,
                 wordWrap = true,
-                normal = { textColor = new Color(0.68f, 0.64f, 0.58f, 0.88f) }
+                normal = { textColor = new Color(0.80f, 0.77f, 0.71f, 0.95f) }
             });
-            var tabletTitle = PassiveText(new GUIStyle(body)
-            {
-                font = uiBoldFont,
-                fontSize = Mathf.Max(17, Mathf.RoundToInt(19f * scale)),
-                fontStyle = FontStyle.Normal,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = new Color32(6, 7, 10, 255) }
-            });
-            var tabletIntro = PassiveText(new GUIStyle(body)
-            {
-                font = uiFont,
-                fontSize = Mathf.Max(14, Mathf.RoundToInt(17f * scale)),
-                fontStyle = FontStyle.Normal,
-                alignment = TextAnchor.MiddleCenter,
-                wordWrap = true,
-                normal = { textColor = new Color32(6, 7, 10, 255) }
-            });
-            var narrative = PassiveText(new GUIStyle(body)
-            {
-                font = uiFont,
-                fontSize = Mathf.Max(13, Mathf.RoundToInt(17f * scale)),
-                fontStyle = FontStyle.Normal,
-                alignment = TextAnchor.MiddleCenter,
-                wordWrap = true,
-                richText = false,
-                normal = { textColor = new Color32(6, 7, 10, 255) }
-            });
-            var narrativeKey = PassiveText(new GUIStyle(narrative)
-            {
-                font = uiBoldFont,
-                fontSize = narrative.fontSize + Mathf.Max(1, Mathf.RoundToInt(0.7f * scale)),
-                fontStyle = FontStyle.Normal,
-                normal = { textColor = new Color32(0, 0, 2, 255) }
-            });
-            var tabletFinal = PassiveText(new GUIStyle(narrative)
-            {
-                font = uiFont,
-                fontSize = Mathf.Max(14, Mathf.RoundToInt(17f * scale)),
-                alignment = TextAnchor.MiddleLeft,
-                normal = { textColor = new Color32(6, 7, 10, 255) }
-            });
-            // Подсказка по органам управления автомата. Новая вёрстка автора её НЕ дублирует:
-            // на его стартовом экране после кнопки нет строки управления вообще, а КРУТИЛКА и
-            // выход по MENU больше нигде не названы — поэтому блок стиля остаётся.
+            // Подсказка по органам автомата: единственное место, где перечислены все три органа
+            // стартового экрана словами единого словаря (так они подписаны на самой стойке).
             var startHint = PassiveText(new GUIStyle(hint)
             {
                 font = uiFont,
@@ -999,42 +938,8 @@ namespace EndlessSisyphus
             PixelTrackedLabel(new Rect(x, top, contentW, 60f * scale), "БЕСКОНЕЧНЫЙ СИЗИФ", startTitle,
                 4.5f * scale, displayPixelScale);
             DrawTitleDivider(Screen.width * 0.5f, top + 64f * scale, Mathf.Min(170f * scale, contentW * 0.3f), scale);
-            PassiveLabel(new Rect(x + 40f * scale, top + 80f * scale, contentW - 80f * scale, 62f * scale), StartQuote, epigraph);
-
-            Rect tablet = new Rect(x, top + 150f * scale, contentW, 348f * scale);
-            DrawInstructionTablet(tablet, scale);
-            float accentWeight = 0.18f * scale;
-            TrackedOutlinedLabel(new Rect(tablet.x + 36f * scale, tablet.y + 20f * scale, tablet.width - 72f * scale, 36f * scale),
-                "КАК ПРЕОДОЛЕВАТЬ ПРЕПЯТСТВИЯ", tabletTitle, 1.5f * scale,
-                accentWeight, tabletTitle.normal.textColor);
-            const string introText = "Толкай камень вверх по бесконечному склону — так высоко, как хватит сил.";
-            PassiveLabel(new Rect(tablet.x + 46f * scale, tablet.y + 62f * scale, tablet.width - 92f * scale, 42f * scale),
-                introText, tabletIntro);
-
-            float storyY = tablet.y + 112f * scale;
-            float storyGap = 35f * scale;
-            // Вёрстка автора (левый край строк от ширины вступления, правая граница от tablet.xMax)
-            // + наши органы автомата вместо клавиатуры: на стойке нет ни SPACE, ни SHIFT, ни C.
-            // Новая сигнатура DrawNarrativeLine сама ставит пробел между сегментами — поэтому
-            // в middle больше нет ведущих/замыкающих пробелов, а suffix липнет к ключу вплотную.
-            float introWidth = tabletIntro.CalcSize(new GUIContent(introText)).x;
-            float storyLeft = Mathf.Max(tablet.x + 48f * scale, tablet.center.x - introWidth * 0.5f);
-            Rect storyRect = new Rect(storyLeft, storyY, tablet.xMax - storyLeft - 48f * scale, 31f * scale);
-            DrawNarrativeLine(storyRect, narrative, narrativeKey, accentWeight,
-                "ЛЁД", "— держи темп на", "КРУТИЛКЕ", ", чтобы не оступиться.");
-            storyRect.y += storyGap;
-            DrawNarrativeLine(storyRect, narrative, narrativeKey, accentWeight,
-                "КРУТОЙ СКЛОН", "— зажми", "! И КРУТИ", ".");
-            storyRect.y += storyGap;
-            // «ОДИН РАЗ» — живой фидбек: красную ЗАЖИМАЮТ, хотя это тоггл.
-            DrawNarrativeLine(storyRect, narrative, narrativeKey, accentWeight,
-                "ДОЖДЬ", "— держи камень крепче:", "КРАСНАЯ ОДИН РАЗ + КРУТИ", ".");
-            storyRect.y += storyGap;
-            DrawNarrativeLine(storyRect, narrative, narrativeKey, accentWeight,
-                "ВЕТЕР", "— замри и", "ПЕРЕСТАНЬ КРУТИТЬ", ".");
-            PassiveLabel(new Rect(storyLeft, tablet.y + 250f * scale,
-                    tablet.xMax - storyLeft - 48f * scale, 82f * scale),
-                "Неверные действия, идущие против природы, отнимают силы Сизифа. Как только силы иссякнут, Сизиф упадёт, и камень скатится к подножью горы.", tabletFinal);
+            PassiveLabel(new Rect(x + 40f * scale, top + 92f * scale, contentW - 80f * scale, 40f * scale),
+                "Толкай камень вверх по бесконечному склону — так высоко, как хватит сил.", pitch);
 
             float buttonW = Mathf.Min(contentW * 0.58f, 440f * scale);
             float buttonX = (Screen.width - buttonW) * 0.5f;
@@ -1044,11 +949,11 @@ namespace EndlessSisyphus
                 fontSize = Mathf.Max(17, Mathf.RoundToInt(19f * scale)),
                 fontStyle = FontStyle.Normal
             };
-            if (GUI.Button(new Rect(buttonX, top + 512f * scale, buttonW, 50f * scale), "ЗЕЛЁНАЯ — НАЧАТЬ", startButton)) game.StartGame();
+            if (GUI.Button(new Rect(buttonX, top + 160f * scale, buttonW, 50f * scale), "ЗЕЛЁНАЯ — НАЧАТЬ", startButton)) game.StartGame();
 
             // Кнопки настроек на автомате нет: мыши у стойки нет, сложность берётся дефолтная
             // (DifficultySettings.Load) — экран настроек остаётся в коде, но входа в него с экранов нет.
-            PassiveLabel(new Rect(x, top + 574f * scale, contentW, 30f * scale),
+            PassiveLabel(new Rect(x, top + 226f * scale, contentW, 30f * scale),
                 "КРУТИЛКА — толкать     ЗЕЛЁНАЯ — начать     MENU — выход", startHint);
 
             float authorMargin = 24f * scale;
